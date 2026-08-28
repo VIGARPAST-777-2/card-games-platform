@@ -29,7 +29,7 @@ Request → Express
 Name:           deckora
 Region:         Frankfurt (o el que prefieras)
 Runtime:        Node
-Build Command:  corepack enable && pnpm install && pnpm build
+Build Command:  npm install -g pnpm@9 && pnpm install && pnpm build
 Start Command:  pnpm start
 Plan:           Free
 ```
@@ -38,10 +38,12 @@ Plan:           Free
 
 ```
 NODE_ENV=production
-NODE_VERSION=20
+NODE_VERSION=22
 ```
 
 5. Advanced → Health Check Path: `/health`
+
+> **Importante:** No uses `corepack enable` en Render. El sistema de archivos es de solo lectura y falla con `EROFS`.
 
 ## Comandos que se ejecutan
 
@@ -62,8 +64,11 @@ El servidor busca `apps/web/dist` y lo sirve con `express.static` + fallback SPA
 
 ## Problemas frecuentes
 
+**`EROFS: read-only file system` con corepack**  
+Usa `npm install -g pnpm@9` en lugar de `corepack enable`.
+
 **Build falla por pnpm**  
-Asegúrate de que `packageManager` esté en el `package.json` raíz (ya está). Render respeta `corepack`.
+El comando de build instala pnpm globalmente primero.
 
 **No se ve el frontend**  
 Revisa en los logs: `[static] sirviendo frontend desde ...`. Si aparece el warning de que no encuentra la carpeta, el build del web no generó `dist`.
@@ -72,7 +77,7 @@ Revisa en los logs: `[static] sirviendo frontend desde ...`. Si aparece el warni
 En plan free el servicio se apaga tras 15 min. La primera visita tarda ~30-60 s. Normal.
 
 **WebSockets**  
-Render free soporta WebSockets. Si hay problemas, fuerza `transports: ['websocket']` solo (sin polling) en el cliente.
+Render free soporta WebSockets.
 
 ## Probar en local el modo producción
 
