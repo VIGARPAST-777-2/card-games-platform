@@ -1,6 +1,3 @@
-# Deckora — Web Service con Docker (frontend + backend)
-# En el dashboard: Environment = Docker
-
 services:
   - type: web
     name: deckora
