@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import type { User, Session } from '@supabase/supabase-js';
-import { getSupabase } from '../lib/supabase';
+import { api, getToken, setToken } from '../lib/api';
 
 export interface Profile {
   id: string;
@@ -20,10 +19,14 @@ export interface Profile {
   title: string | null;
 }
 
+interface AuthUser {
+  id: string;
+  email?: string;
+}
+
 interface AuthState {
   ready: boolean;
-  user: User | null;
-  session: Session | null;
+  user: AuthUser | null;
   profile: Profile | null;
   init: () => Promise<void>;
   signUp: (email: string, password: string, username: string) => Promise<string | null>;
@@ -32,71 +35,71 @@ interface AuthState {
   refreshProfile: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>((set) => ({
   ready: false,
   user: null,
-  session: null,
   profile: null,
 
   init: async () => {
-    try {
-      const sb = await getSupabase();
-      const { data } = await sb.auth.getSession();
-      set({ session: data.session, user: data.session?.user ?? null, ready: true });
-      if (data.session?.user) await get().refreshProfile();
-
-      sb.auth.onAuthStateChange(async (_event, session) => {
-        set({ session, user: session?.user ?? null });
-        if (session?.user) await get().refreshProfile();
-        else set({ profile: null });
-      });
-    } catch (e) {
-      console.error('[auth] init', e);
-      set({ ready: true });
+    const token = getToken();
+    if (!token) {
+      set({ ready: true, user: null, profile: null });
+      return;
+    }
+    const { ok, data } = await api<{ user?: AuthUser; profile?: Profile }>('/api/auth/me');
+    if (ok && data.user) {
+      set({ user: data.user, profile: data.profile ?? null, ready: true });
+    } else {
+      setToken(null);
+      set({ user: null, profile: null, ready: true });
     }
   },
 
   signUp: async (email, password, username) => {
-    try {
-      const sb = await getSupabase();
-      const { error } = await sb.auth.signUp({
-        email,
-        password,
-        options: { data: { username } },
-      });
-      return error?.message ?? null;
-    } catch (e) {
-      return e instanceof Error ? e.message : 'Error de registro';
+    const { ok, data } = await api<{
+      error?: string;
+      access_token?: string;
+      user?: AuthUser;
+      profile?: Profile;
+    }>('/api/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, username }),
+    });
+    if (!ok) return data.error ?? 'Error de registro';
+    if (data.access_token) {
+      setToken(data.access_token);
+      set({ user: data.user ?? null, profile: data.profile ?? null });
     }
+    return null;
   },
 
   signIn: async (email, password) => {
-    try {
-      const sb = await getSupabase();
-      const { error } = await sb.auth.signInWithPassword({ email, password });
-      return error?.message ?? null;
-    } catch (e) {
-      return e instanceof Error ? e.message : 'Error de login';
+    const { ok, data } = await api<{
+      error?: string;
+      access_token?: string;
+      user?: AuthUser;
+      profile?: Profile;
+    }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    if (!ok) return data.error ?? 'Error de login';
+    if (data.access_token) {
+      setToken(data.access_token);
+      set({ user: data.user ?? null, profile: data.profile ?? null });
     }
+    return null;
   },
 
   signOut: async () => {
-    const sb = await getSupabase();
-    await sb.auth.signOut();
-    set({ user: null, session: null, profile: null });
+    await api('/api/auth/logout', { method: 'POST' });
+    setToken(null);
+    set({ user: null, profile: null });
   },
 
   refreshProfile: async () => {
-    const sb = await getSupabase();
-    const user = get().user;
-    if (!user) return;
-    const { data } = await sb
-      .from('profiles')
-      .select(
-        'id, username, avatar_url, level, xp, wins, losses, games_played, coins, gems, current_streak, best_streak, season_pass_xp, season_pass_premium, title'
-      )
-      .eq('auth_user_id', user.id)
-      .maybeSingle();
-    if (data) set({ profile: data as Profile });
+    if (!getToken()) return;
+    const { ok, data } = await api<{ profile?: Profile }>('/api/auth/me');
+    if (ok && data.profile) set({ profile: data.profile });
   },
 }));
