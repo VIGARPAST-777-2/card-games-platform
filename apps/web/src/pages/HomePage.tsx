@@ -6,35 +6,35 @@ const MODES = [
     title: 'Contra bots',
     desc: 'Practica con dificultad adaptativa',
     icon: '🤖',
-    color: 'from-emerald-600/20 to-emerald-900/10 border-emerald-700/40',
+    accent: 'border-felt-500/50 hover:border-felt-400',
   },
   {
     id: 'quick',
     title: 'Partida rápida',
     desc: 'Matchmaking casual, empieza ya',
     icon: '⚡',
-    color: 'from-amber-600/20 to-amber-900/10 border-amber-700/40',
+    accent: 'border-gold-600/40 hover:border-gold-400',
   },
   {
     id: 'friendly',
     title: 'Amistosa',
     desc: 'Con amigos, sin afectar rango',
     icon: '🤝',
-    color: 'from-sky-600/20 to-sky-900/10 border-sky-700/40',
+    accent: 'border-cream-400/30 hover:border-cream-300/60',
   },
   {
     id: 'private',
     title: 'Privada',
     desc: 'Sala con código o enlace',
     icon: '🔒',
-    color: 'from-violet-600/20 to-violet-900/10 border-violet-700/40',
+    accent: 'border-wood-700 hover:border-wood-700',
   },
   {
     id: 'ranked',
     title: 'Ranked',
     desc: 'Competitivo · MMR · Temporadas',
     icon: '🏆',
-    color: 'from-rose-600/20 to-rose-900/10 border-rose-700/40',
+    accent: 'border-wine-600/50 hover:border-wine-400',
   },
 ];
 
@@ -42,10 +42,10 @@ export function HomePage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
       <section className="text-center mb-12">
-        <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-3">
-          <span className="text-deckora-400">Deckora</span>
+        <h1 className="font-display text-4xl sm:text-5xl tracking-wide mb-3 text-cream-100">
+          <span className="text-gold-400">Deckora</span>
         </h1>
-        <p className="text-slate-400 text-lg max-w-xl mx-auto">
+        <p className="text-cream-300/80 text-lg max-w-xl mx-auto leading-relaxed">
           Juegos de cartas clásicos. Solo, con amigos o ranked.
           <br />
           Reconexión inteligente y bots que no te dejan tirado.
@@ -57,21 +57,23 @@ export function HomePage() {
           <Link
             key={mode.id}
             to={`/play?mode=${mode.id}`}
-            className={`group rounded-2xl border bg-gradient-to-br p-5 transition hover:scale-[1.02] hover:shadow-lg ${
-              mode.color
+            className={`group rounded-xl border bg-felt-900/50 p-5 shadow-card transition hover:bg-felt-800/50 hover:shadow-soft ${
+              mode.accent
             }`}
           >
-            <div className="text-3xl mb-2">{mode.icon}</div>
-            <h2 className="font-semibold text-lg mb-1 group-hover:text-white">{mode.title}</h2>
-            <p className="text-sm text-slate-400">{mode.desc}</p>
+            <div className="text-3xl mb-3">{mode.icon}</div>
+            <h2 className="font-display text-lg text-cream-100 mb-1 group-hover:text-gold-300 transition">
+              {mode.title}
+            </h2>
+            <p className="text-sm text-cream-300/65">{mode.desc}</p>
           </Link>
         ))}
       </section>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6 text-center">
-        <h3 className="font-semibold mb-2">🚀 Estado del proyecto</h3>
-        <p className="text-sm text-slate-400">
-          Concepto y estructura base listos. Motor de partidas, reconexión y primer juego en desarrollo.
+      <section className="rounded-xl border border-wood-700/80 bg-wood-950/60 p-6 text-center shadow-soft">
+        <h3 className="font-display text-cream-100 mb-2">Estado del proyecto</h3>
+        <p className="text-sm text-cream-300/70">
+          Base de datos lista · Motor de partidas y primer juego en desarrollo.
         </p>
       </section>
     </div>
