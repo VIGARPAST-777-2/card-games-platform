@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { getSupabase } from '../lib/supabase';
+import { useState } from 'react';
+import { api } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
 
 interface Club {
@@ -16,34 +16,19 @@ export function ClubsPage() {
   const [tag, setTag] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      const sb = await getSupabase();
-      if (!sb) return;
-      const { data } = await sb.from('clubs').select('id, name, tag, description').limit(50);
-      if (data) setClubs(data as Club[]);
-    })();
-  }, []);
-
   async function createClub() {
     if (!user) {
       setMsg('Inicia sesión');
       return;
     }
-    const token = (await (await getSupabase())?.auth.getSession())?.data.session?.access_token;
-    const res = await fetch('/api/clubs', {
+    const { ok, data } = await api<{ error?: string; club?: Club }>('/api/clubs', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
       body: JSON.stringify({ name, tag }),
     });
-    const body = await res.json();
-    if (!res.ok) setMsg(body.error);
-    else {
+    if (!ok) setMsg(data.error ?? 'Error');
+    else if (data.club) {
       setMsg('Club creado');
-      setClubs((c) => [...c, body.club]);
+      setClubs((c) => [...c, data.club!]);
       setName('');
       setTag('');
     }
@@ -51,8 +36,8 @@ export function ClubsPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="font-display text-3xl text-navy-900 mb-2">Clubes</h1>
-      <p className="text-navy-500 mb-8">Únete o crea un club para jugar en comunidad.</p>
+      <h1 className="font-brand text-3xl text-navy-900 mb-2">Clubes</h1>
+      <p className="text-navy-500 mb-8">Crea un club para jugar en comunidad.</p>
 
       <div className="rounded-xl border border-navy-100 bg-white p-5 shadow-soft mb-8">
         <h2 className="font-semibold text-navy-900 mb-3">Crear club</h2>
@@ -90,14 +75,11 @@ export function ClubsPage() {
             <span className="rounded-md bg-navy-900 text-white text-xs font-bold px-2 py-1">
               {c.tag}
             </span>
-            <div>
-              <div className="font-semibold text-navy-900">{c.name}</div>
-              {c.description && <div className="text-sm text-navy-500">{c.description}</div>}
-            </div>
+            <div className="font-semibold text-navy-900">{c.name}</div>
           </li>
         ))}
         {clubs.length === 0 && (
-          <li className="text-navy-500 text-sm">No hay clubes todavía.</li>
+          <li className="text-navy-500 text-sm">Crea el primer club de la sesión.</li>
         )}
       </ul>
     </div>
