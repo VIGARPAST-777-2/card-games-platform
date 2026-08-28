@@ -11,19 +11,18 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon.svg', 'logo-icon.svg'],
       manifest: {
         name: 'Deckora',
         short_name: 'Deckora',
-        description: 'Plataforma PWA de juegos de cartas clásicos',
-        theme_color: '#0f172a',
-        background_color: '#0f172a',
+        description: 'Juegos de cartas clásicos online',
+        theme_color: '#0B1F3A',
+        background_color: '#faf9f7',
         display: 'standalone',
-        orientation: 'any',
         start_url: '/',
         icons: [
           {
-            src: '/favicon.svg',
+            src: '/logo-icon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
             purpose: 'any',
@@ -40,10 +39,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/socket.io': {
-        target: 'http://localhost:3001',
-        ws: true,
-      },
+      '/api': { target: 'http://localhost:3001' },
+      '/socket.io': { target: 'http://localhost:3001', ws: true },
+      '/health': { target: 'http://localhost:3001' },
     },
   },
 });
