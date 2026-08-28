@@ -1,8 +1,7 @@
-import type { RankTier } from './types';
-import { RANK_TIERS, RANK_DIVISIONS } from './constants';
+import type { RankTier } from './types.js';
+import { RANK_TIERS } from './constants.js';
 
 export function mmrToTier(mmr: number): { tier: RankTier; division: number } {
-  // Simple mapping (ajustar con datos reales)
   if (mmr < 400) return { tier: 'bronze', division: clampDivision(mmr, 0, 400) };
   if (mmr < 800) return { tier: 'silver', division: clampDivision(mmr, 400, 800) };
   if (mmr < 1200) return { tier: 'gold', division: clampDivision(mmr, 800, 1200) };
