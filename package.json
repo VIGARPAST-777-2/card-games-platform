@@ -10,7 +10,7 @@
     "build": "pnpm --filter @deckora/shared build && pnpm --filter @deckora/web build && pnpm --filter @deckora/server build",
     "build:web": "pnpm --filter @deckora/web build",
     "build:server": "pnpm --filter @deckora/server build",
-    "start": "pnpm --filter @deckora/server start",
+    "start": "node apps/server/dist/index.js",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck"
   },
