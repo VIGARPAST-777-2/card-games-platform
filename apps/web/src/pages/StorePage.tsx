@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getSupabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
 
 interface StoreItem {
@@ -18,10 +18,8 @@ export function StorePage() {
 
   useEffect(() => {
     (async () => {
-      const sb = await getSupabase();
-      if (!sb) return;
-      const { data } = await sb.from('store_items').select('*').eq('active', true);
-      if (data) setItems(data as StoreItem[]);
+      const { ok, data } = await api<StoreItem[]>('/api/store/items');
+      if (ok) setItems(data);
     })();
   }, []);
 
@@ -30,16 +28,11 @@ export function StorePage() {
       setMsg('Inicia sesión para comprar');
       return;
     }
-    const res = await fetch('/api/store/buy', {
+    const { ok, data } = await api<{ error?: string }>('/api/store/buy', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${(await (await getSupabase())?.auth.getSession())?.data.session?.access_token}`,
-      },
       body: JSON.stringify({ itemId: item.id }),
     });
-    const body = await res.json();
-    if (!res.ok) setMsg(body.error ?? 'Error');
+    if (!ok) setMsg(data.error ?? 'Error');
     else {
       setMsg(`Comprado: ${item.name}`);
       await refreshProfile();
@@ -48,12 +41,12 @@ export function StorePage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-10">
-      <h1 className="font-display text-3xl text-navy-900 mb-2">Tienda</h1>
+      <h1 className="font-brand text-3xl text-navy-900 mb-2">Tienda</h1>
       <p className="text-navy-500 mb-6">
-        Cosméticos, monedas y pase. Todo cosmético — sin pay-to-win.
+        Cosméticos, monedas y pase.
         {profile && (
           <span className="ml-2 font-semibold text-navy-800">
-            Tu saldo: {profile.coins.toLocaleString()} 🪙 · {profile.gems} 💎
+            {profile.coins.toLocaleString()} 🪙 · {profile.gems} 💎
           </span>
         )}
       </p>
