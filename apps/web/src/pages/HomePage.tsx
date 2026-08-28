@@ -1,80 +1,74 @@
 import { Link } from 'react-router-dom';
+import { useAuthStore } from '../store/authStore';
 
 const MODES = [
-  {
-    id: 'bot',
-    title: 'Contra bots',
-    desc: 'Practica con dificultad adaptativa',
-    icon: '🤖',
-    accent: 'border-felt-500/50 hover:border-felt-400',
-  },
-  {
-    id: 'quick',
-    title: 'Partida rápida',
-    desc: 'Matchmaking casual, empieza ya',
-    icon: '⚡',
-    accent: 'border-gold-600/40 hover:border-gold-400',
-  },
-  {
-    id: 'friendly',
-    title: 'Amistosa',
-    desc: 'Con amigos, sin afectar rango',
-    icon: '🤝',
-    accent: 'border-cream-400/30 hover:border-cream-300/60',
-  },
-  {
-    id: 'private',
-    title: 'Privada',
-    desc: 'Sala con código o enlace',
-    icon: '🔒',
-    accent: 'border-wood-700 hover:border-wood-700',
-  },
-  {
-    id: 'ranked',
-    title: 'Ranked',
-    desc: 'Competitivo · MMR · Temporadas',
-    icon: '🏆',
-    accent: 'border-wine-600/50 hover:border-wine-400',
-  },
+  { id: 'bot', title: 'Contra bots', desc: 'Practica con dificultad adaptativa', icon: '🤖' },
+  { id: 'quick', title: 'Partida rápida', desc: 'Matchmaking casual', icon: '⚡' },
+  { id: 'friendly', title: 'Amistosa', desc: 'Sin afectar al rango', icon: '🤝' },
+  { id: 'private', title: 'Privada', desc: 'Sala con código', icon: '🔒' },
+  { id: 'ranked', title: 'Ranked', desc: 'MMR y temporadas', icon: '🏆' },
 ];
 
 export function HomePage() {
+  const { profile, user } = useAuthStore();
+
   return (
-    <div className="max-w-5xl mx-auto px-4 py-10">
+    <div className="max-w-6xl mx-auto px-4 py-10">
       <section className="text-center mb-12">
-        <h1 className="font-display text-4xl sm:text-5xl tracking-wide mb-3 text-cream-100">
-          <span className="text-gold-400">Deckora</span>
-        </h1>
-        <p className="text-cream-300/80 text-lg max-w-xl mx-auto leading-relaxed">
-          Juegos de cartas clásicos. Solo, con amigos o ranked.
-          <br />
-          Reconexión inteligente y bots que no te dejan tirado.
+        <img src="/logo-icon.svg" alt="Deckora" className="w-20 h-20 mx-auto mb-4" />
+        <h1 className="font-display text-4xl sm:text-5xl text-navy-900 mb-3">Deckora</h1>
+        <p className="text-navy-600 text-lg max-w-xl mx-auto">
+          Juegos de cartas clásicos. Compite, colecciona y juega con amigos.
         </p>
+        {!user && (
+          <Link
+            to="/auth"
+            className="inline-block mt-6 rounded-lg bg-navy-900 text-white px-6 py-2.5 font-medium hover:bg-navy-800"
+          >
+            Crear cuenta gratis
+          </Link>
+        )}
+        {profile && (
+          <p className="mt-4 text-sm text-navy-500">
+            Hola, <span className="font-semibold text-navy-800">{profile.username}</span>
+            {' · '}{profile.coins.toLocaleString()} monedas · racha {profile.current_streak}
+          </p>
+        )}
       </section>
 
+      <h2 className="font-display text-xl text-navy-900 mb-4">Modos de juego</h2>
+      <p className="text-sm text-navy-500 mb-4">
+        El primer juego se anunciará pronto. Los modos ya están preparados.
+      </p>
       <section className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-12">
-        {MODES.map((mode) => (
+        {MODES.map((m) => (
           <Link
-            key={mode.id}
-            to={`/play?mode=${mode.id}`}
-            className={`group rounded-xl border bg-felt-900/50 p-5 shadow-card transition hover:bg-felt-800/50 hover:shadow-soft ${
-              mode.accent
-            }`}
+            key={m.id}
+            to={`/play?mode=${m.id}`}
+            className="rounded-xl border border-navy-100 bg-white p-5 shadow-soft hover:shadow-card hover:border-navy-200 transition"
           >
-            <div className="text-3xl mb-3">{mode.icon}</div>
-            <h2 className="font-display text-lg text-cream-100 mb-1 group-hover:text-gold-300 transition">
-              {mode.title}
-            </h2>
-            <p className="text-sm text-cream-300/65">{mode.desc}</p>
+            <div className="text-2xl mb-2">{m.icon}</div>
+            <h3 className="font-semibold text-navy-900">{m.title}</h3>
+            <p className="text-sm text-navy-500 mt-1">{m.desc}</p>
           </Link>
         ))}
       </section>
 
-      <section className="rounded-xl border border-wood-700/80 bg-wood-950/60 p-6 text-center shadow-soft">
-        <h3 className="font-display text-cream-100 mb-2">Estado del proyecto</h3>
-        <p className="text-sm text-cream-300/70">
-          Base de datos lista · Motor de partidas y primer juego en desarrollo.
-        </p>
+      <section className="grid sm:grid-cols-3 gap-4">
+        {[
+          { to: '/store', title: 'Tienda', desc: 'Cosméticos y monedas' },
+          { to: '/pass', title: 'Pase de temporada', desc: 'Misiones y recompensas' },
+          { to: '/clubs', title: 'Clubes', desc: 'Comunidad y competición' },
+        ].map((x) => (
+          <Link
+            key={x.to}
+            to={x.to}
+            className="rounded-xl bg-navy-900 text-white p-5 hover:bg-navy-800 transition"
+          >
+            <h3 className="font-display text-lg">{x.title}</h3>
+            <p className="text-sm text-navy-200 mt-1">{x.desc}</p>
+          </Link>
+        ))}
       </section>
     </div>
   );
