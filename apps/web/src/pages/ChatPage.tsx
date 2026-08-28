@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getSupabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
 
 interface Thread {
@@ -23,22 +23,14 @@ export function ChatPage() {
   const [text, setText] = useState('');
   const [dmUser, setDmUser] = useState('');
 
-  async function token() {
-    return (await (await getSupabase())?.auth.getSession())?.data.session?.access_token;
-  }
-
   async function loadThreads() {
-    const t = await token();
-    const res = await fetch('/api/chat/threads', { headers: { Authorization: `Bearer ${t}` } });
-    if (res.ok) setThreads(await res.json());
+    const { ok, data } = await api<Thread[]>('/api/chat/threads');
+    if (ok) setThreads(data);
   }
 
   async function loadMessages(threadId: string) {
-    const t = await token();
-    const res = await fetch(`/api/chat/threads/${threadId}/messages`, {
-      headers: { Authorization: `Bearer ${t}` },
-    });
-    if (res.ok) setMessages(await res.json());
+    const { ok, data } = await api<Message[]>(`/api/chat/threads/${threadId}/messages`);
+    if (ok) setMessages(data);
   }
 
   useEffect(() => {
@@ -50,29 +42,24 @@ export function ChatPage() {
   }, [active]);
 
   async function openDm() {
-    const t = await token();
-    const res = await fetch('/api/chat/dm', {
+    const { ok, data } = await api<{ threadId: string }>('/api/chat/dm', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: dmUser }),
     });
-    const body = await res.json();
-    if (res.ok) {
+    if (ok) {
       await loadThreads();
-      setActive(body.threadId);
+      setActive(data.threadId);
       setDmUser('');
     }
   }
 
   async function send() {
     if (!active || !text.trim()) return;
-    const t = await token();
-    const res = await fetch(`/api/chat/threads/${active}/messages`, {
+    const { ok } = await api(`/api/chat/threads/${active}/messages`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ body: text }),
     });
-    if (res.ok) {
+    if (ok) {
       setText('');
       loadMessages(active);
     }
