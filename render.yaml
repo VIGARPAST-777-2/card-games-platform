@@ -6,12 +6,12 @@ services:
     name: deckora
     runtime: node
     plan: free
-    region: frankfurt   # cambia si prefieres otra región
-    buildCommand: corepack enable && pnpm install --frozen-lockfile=false && pnpm build
+    region: frankfurt
+    buildCommand: npm install -g pnpm@9 && pnpm install && pnpm build
     startCommand: pnpm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: NODE_VERSION
-        value: "20"
+        value: "22"
     healthCheckPath: /health
