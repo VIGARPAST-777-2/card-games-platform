@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getSupabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
 
 interface Bet {
@@ -19,14 +19,9 @@ export function BetsPage() {
   const [note, setNote] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
 
-  async function token() {
-    return (await (await getSupabase())?.auth.getSession())?.data.session?.access_token;
-  }
-
   async function load() {
-    const t = await token();
-    const res = await fetch('/api/bets', { headers: { Authorization: `Bearer ${t}` } });
-    if (res.ok) setBets(await res.json());
+    const { ok, data } = await api<Bet[]>('/api/bets');
+    if (ok) setBets(data);
   }
 
   useEffect(() => {
@@ -34,29 +29,23 @@ export function BetsPage() {
   }, [user]);
 
   async function createBet() {
-    const t = await token();
-    const res = await fetch('/api/bets', {
+    const { ok, data } = await api<{ error?: string }>('/api/bets', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount, opponentUsername: opponent || null, note }),
     });
-    const body = await res.json();
-    setMsg(res.ok ? 'Apuesta creada' : body.error);
-    if (res.ok) {
+    setMsg(ok ? 'Apuesta creada' : data.error ?? 'Error');
+    if (ok) {
       load();
       refreshProfile();
     }
   }
 
   async function accept(id: string) {
-    const t = await token();
-    const res = await fetch(`/api/bets/${id}/accept`, {
+    const { ok, data } = await api<{ error?: string }>(`/api/bets/${id}/accept`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${t}` },
     });
-    const body = await res.json();
-    setMsg(res.ok ? 'Apuesta aceptada' : body.error);
-    if (res.ok) {
+    setMsg(ok ? 'Apuesta aceptada' : data.error ?? 'Error');
+    if (ok) {
       load();
       refreshProfile();
     }
@@ -70,8 +59,7 @@ export function BetsPage() {
     <div className="max-w-2xl mx-auto px-4 py-10">
       <h1 className="font-brand text-2xl text-navy-900 mb-2">Apuestas</h1>
       <p className="text-navy-500 text-sm mb-6">
-        Solo monedas de juego (sin dinero real). Tu saldo: {" "}
-        <strong>{profile?.coins.toLocaleString()} 🪙</strong>
+        Solo monedas de juego. Saldo: <strong>{profile?.coins.toLocaleString()} 🪙</strong>
       </p>
 
       <div className="rounded-xl border border-navy-100 bg-white p-5 mb-8 shadow-soft space-y-3">
@@ -82,7 +70,6 @@ export function BetsPage() {
           value={amount}
           onChange={(e) => setAmount(Number(e.target.value))}
           className="w-full border border-navy-200 rounded-lg px-3 py-2"
-          placeholder="Cantidad"
         />
         <input
           value={opponent}
@@ -94,7 +81,7 @@ export function BetsPage() {
           value={note}
           onChange={(e) => setNote(e.target.value)}
           className="w-full border border-navy-200 rounded-lg px-3 py-2"
-          placeholder="Nota (ej. ganador del próximo ranked)"
+          placeholder="Nota"
         />
         <button
           type="button"
