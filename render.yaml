@@ -7,7 +7,9 @@ services:
     runtime: node
     plan: free
     region: frankfurt
-    buildCommand: npm install -g pnpm@9 && pnpm install && pnpm build
+    # NODE_ENV=production hace que pnpm omita devDependencies (vite, typescript…)
+    # Por eso forzamos install completo en el build.
+    buildCommand: npm install -g pnpm@9 && pnpm install --prod=false && pnpm build
     startCommand: pnpm start
     envVars:
       - key: NODE_ENV
