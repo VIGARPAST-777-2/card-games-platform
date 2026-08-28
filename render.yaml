@@ -1,15 +1,15 @@
-# Deckora — un solo Web Service en Render
+# Deckora — Web Service con Docker (frontend + backend)
+# En el dashboard: Environment = Docker
 
 services:
   - type: web
     name: deckora
-    runtime: node
+    runtime: docker
     plan: free
     region: frankfurt
-    # --prod=false: instala devDependencies (vite, typescript) aunque haya NODE_ENV=production
-    buildCommand: npm install -g pnpm@9 && pnpm install --prod=false && pnpm build
-    startCommand: pnpm start
-    envVars:
-      - key: NODE_VERSION
-        value: "22"
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
