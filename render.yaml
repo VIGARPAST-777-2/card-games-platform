@@ -1,5 +1,4 @@
-# Deckora — un solo Web Service en Render (frontend + backend)
-# https://render.com/docs/blueprint-spec
+# Deckora — un solo Web Service en Render
 
 services:
   - type: web
@@ -7,13 +6,10 @@ services:
     runtime: node
     plan: free
     region: frankfurt
-    # NODE_ENV=production hace que pnpm omita devDependencies (vite, typescript…)
-    # Por eso forzamos install completo en el build.
+    # --prod=false: instala devDependencies (vite, typescript) aunque haya NODE_ENV=production
     buildCommand: npm install -g pnpm@9 && pnpm install --prod=false && pnpm build
     startCommand: pnpm start
     envVars:
-      - key: NODE_ENV
-        value: production
       - key: NODE_VERSION
         value: "22"
     healthCheckPath: /health
