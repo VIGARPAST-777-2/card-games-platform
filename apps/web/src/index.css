@@ -1,26 +1,30 @@
-@import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
   color-scheme: light;
+  --navy: #0b1f3a;
+  --cream: #faf9f7;
 }
 
 body {
   margin: 0;
   min-height: 100dvh;
-  font-family: 'Source Sans 3', system-ui, sans-serif;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  background: #faf9f7;
-  color: #0B1F3A;
+  background: var(--cream);
+  color: var(--navy);
 }
 
 #root {
   min-height: 100dvh;
 }
 
-.font-display {
-  font-family: 'Libre Baskerville', Georgia, serif;
+/* Wordmark: misma familia que la marca (serif simple) */
+.font-brand {
+  font-family: Georgia, 'Times New Roman', Times, serif;
+  letter-spacing: -0.02em;
 }
