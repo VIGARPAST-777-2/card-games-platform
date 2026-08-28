@@ -1,0 +1,17 @@
+# Deckora — un solo Web Service en Render (frontend + backend)
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: deckora
+    runtime: node
+    plan: free
+    region: frankfurt   # cambia si prefieres otra región
+    buildCommand: corepack enable && pnpm install --frozen-lockfile=false && pnpm build
+    startCommand: pnpm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "20"
+    healthCheckPath: /health
