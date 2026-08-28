@@ -1,54 +1,33 @@
 import { useEffect, useState } from 'react';
-import { getSupabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
 
 export function FriendsPage() {
-  const { profile, user } = useAuthStore();
+  const { user } = useAuthStore();
   const [username, setUsername] = useState('');
-  const [friends, setFriends] = useState<{ id: string; username: string; status: string }[]>([]);
+  const [friends, setFriends] = useState<{ id: string; status: string; requester_id: string; addressee_id: string }[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
 
   async function load() {
-    if (!profile) return;
-    const sb = await getSupabase();
-    if (!sb) return;
-    const { data } = await sb
-      .from('friendships')
-      .select('id, status, requester_id, addressee_id')
-      .or(`requester_id.eq.${profile.id},addressee_id.eq.${profile.id}`);
-    // simplificado: mostrar ids; enriquecer en server después
-    if (data) {
-      setFriends(
-        data.map((f) => ({
-          id: f.id,
-          username: f.requester_id === profile.id ? f.addressee_id.slice(0, 8) : f.requester_id.slice(0, 8),
-          status: f.status,
-        }))
-      );
-    }
+    const { ok, data } = await api<typeof friends>('/api/friends');
+    if (ok) setFriends(data);
   }
 
   useEffect(() => {
-    load();
-  }, [profile?.id]);
+    if (user) load();
+  }, [user]);
 
   async function addFriend() {
     if (!user) {
       setMsg('Inicia sesión');
       return;
     }
-    const token = (await (await getSupabase())?.auth.getSession())?.data.session?.access_token;
-    const res = await fetch('/api/friends/request', {
+    const { ok, data } = await api<{ error?: string }>('/api/friends/request', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
       body: JSON.stringify({ username }),
     });
-    const body = await res.json();
-    setMsg(res.ok ? 'Solicitud enviada' : body.error);
-    if (res.ok) {
+    setMsg(ok ? 'Solicitud enviada' : data.error ?? 'Error');
+    if (ok) {
       setUsername('');
       load();
     }
@@ -64,7 +43,7 @@ export function FriendsPage() {
 
   return (
     <div className="max-w-lg mx-auto px-4 py-10">
-      <h1 className="font-display text-3xl text-navy-900 mb-6">Amigos</h1>
+      <h1 className="font-brand text-3xl text-navy-900 mb-6">Amigos</h1>
       <div className="flex gap-2 mb-6">
         <input
           value={username}
@@ -83,14 +62,14 @@ export function FriendsPage() {
       {msg && <p className="text-sm text-navy-600 mb-4">{msg}</p>}
       <ul className="space-y-2">
         {friends.length === 0 && (
-          <li className="text-navy-500 text-sm">Aún no tienes amigos. ¡Invita a alguien!</li>
+          <li className="text-navy-500 text-sm">Aún no tienes amigos.</li>
         )}
         {friends.map((f) => (
           <li
             key={f.id}
             className="rounded-lg border border-navy-100 bg-white px-4 py-3 flex justify-between"
           >
-            <span className="font-medium text-navy-900">{f.username}</span>
+            <span className="font-medium text-navy-900 text-sm">{f.id.slice(0, 8)}…</span>
             <span className="text-xs text-navy-500">{f.status}</span>
           </li>
         ))}
