@@ -39,50 +39,57 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   profile: null,
 
   init: async () => {
-    const sb = await getSupabase();
-    if (!sb) {
-      set({ ready: true });
-      return;
-    }
-    const { data } = await sb.auth.getSession();
-    set({ session: data.session, user: data.session?.user ?? null, ready: true });
-    if (data.session?.user) await get().refreshProfile();
+    try {
+      const sb = await getSupabase();
+      const { data } = await sb.auth.getSession();
+      set({ session: data.session, user: data.session?.user ?? null, ready: true });
+      if (data.session?.user) await get().refreshProfile();
 
-    sb.auth.onAuthStateChange(async (_event, session) => {
-      set({ session, user: session?.user ?? null });
-      if (session?.user) await get().refreshProfile();
-      else set({ profile: null });
-    });
+      sb.auth.onAuthStateChange(async (_event, session) => {
+        set({ session, user: session?.user ?? null });
+        if (session?.user) await get().refreshProfile();
+        else set({ profile: null });
+      });
+    } catch (e) {
+      console.error('[auth] init', e);
+      set({ ready: true });
+    }
   },
 
   signUp: async (email, password, username) => {
-    const sb = await getSupabase();
-    if (!sb) return 'Supabase no configurado';
-    const { error } = await sb.auth.signUp({
-      email,
-      password,
-      options: { data: { username } },
-    });
-    return error?.message ?? null;
+    try {
+      const sb = await getSupabase();
+      const { error } = await sb.auth.signUp({
+        email,
+        password,
+        options: { data: { username } },
+      });
+      return error?.message ?? null;
+    } catch (e) {
+      return e instanceof Error ? e.message : 'Error de registro';
+    }
   },
 
   signIn: async (email, password) => {
-    const sb = await getSupabase();
-    if (!sb) return 'Supabase no configurado';
-    const { error } = await sb.auth.signInWithPassword({ email, password });
-    return error?.message ?? null;
+    try {
+      const sb = await getSupabase();
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      return error?.message ?? null;
+    } catch (e) {
+      return e instanceof Error ? e.message : 'Error de login';
+    }
   },
 
   signOut: async () => {
     const sb = await getSupabase();
-    await sb?.auth.signOut();
+    await sb.auth.signOut();
     set({ user: null, session: null, profile: null });
   },
 
   refreshProfile: async () => {
     const sb = await getSupabase();
     const user = get().user;
-    if (!sb || !user) return;
+    if (!user) return;
     const { data } = await sb
       .from('profiles')
       .select(
