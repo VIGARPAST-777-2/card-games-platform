@@ -1,40 +1,37 @@
-import { useSearchParams, useParams } from 'react-router-dom';
+import { useSearchParams, useParams, Link } from 'react-router-dom';
+import { useAuthStore } from '../store/authStore';
 
 export function PlayPage() {
   const [params] = useSearchParams();
   const { matchId } = useParams();
   const mode = params.get('mode') ?? 'quick';
+  const { user } = useAuthStore();
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10">
-      <div className="rounded-xl border border-felt-600/40 bg-felt-900/70 p-8 text-center shadow-card">
-        <div className="text-5xl mb-4">🃏</div>
-        <h1 className="font-display text-2xl text-cream-100 mb-2">Mesa de juego</h1>
-        <p className="text-cream-300/75 mb-6">
-          {matchId ? (
+    <div className="max-w-2xl mx-auto px-4 py-12">
+      <div className="rounded-2xl border border-navy-100 bg-white p-8 text-center shadow-card">
+        <img src="/logo-icon.svg" alt="" className="w-16 h-16 mx-auto mb-4" />
+        <h1 className="font-display text-2xl text-navy-900 mb-2">Mesa de juego</h1>
+        <p className="text-navy-500 mb-6">
+          Modo: <span className="font-semibold text-navy-800">{mode}</span>
+          {matchId && (
             <>
-              Partida <code className="text-gold-400">{matchId}</code>
-            </>
-          ) : (
-            <>
-              Modo: <span className="text-gold-400 font-medium">{mode}</span>
+              {' · '}Partida <code className="text-navy-700">{matchId}</code>
             </>
           )}
         </p>
-
-        <div className="bg-wood-950/50 rounded-lg p-6 border border-wood-700 text-left text-sm space-y-2">
-          <p className="text-cream-100 font-medium">En construcción</p>
-          <ul className="list-disc list-inside text-cream-300/65 space-y-1">
-            <li>Conexión Socket.io al servidor</li>
-            <li>Matchmaking / creación de sala</li>
-            <li>Render de cartas y turnos</li>
-            <li>Sistema de reconexión con bot</li>
-          </ul>
+        <div className="rounded-xl bg-cream-200/60 border border-navy-50 p-5 text-left text-sm text-navy-700">
+          <p className="font-medium text-navy-900 mb-2">Primer juego próximamente</p>
+          <p>
+            Los modos (bots, rápida, amistosa, privada, ranked), monedas y reconexión ya están en la
+            plataforma. Cuando indiques el primer juego, lo montamos sobre este motor.
+          </p>
         </div>
-
-        <p className="mt-6 text-xs text-cream-400/50">
-          Motor de partidas en <code className="text-cream-300/80">apps/server</code>
-        </p>
+        {!user && (
+          <Link to="/auth" className="inline-block mt-6 text-sm font-medium text-navy-900 underline">
+            Inicia sesión para guardar progreso
+          </Link>
+        )}
       </div>
     </div>
   );
