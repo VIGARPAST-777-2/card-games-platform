@@ -1,75 +1,60 @@
-# Desplegar Deckora en Render (un solo servicio)
+# Desplegar Deckora en Render (Docker)
 
-## Resumen
+Frontend + backend en **una sola imagen Docker** → un solo Web Service.
 
-Frontend (Vite/React) + Backend (Express + Socket.io) se ejecutan en **el mismo proceso Node**.
+## Configuración en Render
 
-```
-Request → Express
-            ├── /socket.io  → Socket.io
-            ├── /health     → health check
-            └── /*          → archivos estáticos de apps/web/dist (SPA)
-```
+1. Abre tu servicio en el dashboard
+2. **Settings** → **Build & Deploy**:
+   - **Language / Environment:** `Docker`
+   - **Dockerfile Path:** `./Dockerfile` (o déjalo vacío si está en la raíz)
+   - **Docker Build Context Directory:** `.`
+3. **Health Check Path:** `/health`
+4. Guarda y **Manual Deploy**
 
-## Pasos rápidos
+No hace falta Build Command ni Start Command: Docker se encarga de todo.
 
-### 1. Blueprint (más fácil)
+### Variables de entorno (opcionales)
 
-1. [render.com](https://dashboard.render.com) → **New** → **Blueprint**
-2. Conecta el repositorio `VIGARPAST-777-2/card-games-platform`
-3. Confirma. Render usa el archivo `render.yaml`.
+| Key | Value |
+|-----|--------|
+| `NODE_ENV` | `production` |
 
-### 2. Manual
+`PORT` lo asigna Render automáticamente.
 
-1. **New** → **Web Service**
-2. Conecta el repo
-3. Ajustes:
-
-```
-Name:           deckora
-Region:         Frankfurt (o el que prefieras)
-Runtime:        Node
-Build Command:  npm install -g pnpm@9 && pnpm install --prod=false && pnpm build
-Start Command:  pnpm start
-Plan:           Free
-```
-
-4. Environment:
+## Qué hace el Dockerfile
 
 ```
-NODE_ENV=production
-NODE_VERSION=22
+1. Node 22 + pnpm 9
+2. Copia el monorepo
+3. pnpm install --prod=false
+4. pnpm build  (web → dist + server → dist)
+5. pnpm prune --prod
+6. CMD: pnpm start
 ```
 
-5. Advanced → Health Check Path: `/health`
+Express sirve `apps/web/dist` y Socket.io en el mismo puerto.
 
-> **Importante:**
-> - No uses `corepack enable` → falla con `EROFS`.
-> - Usa `pnpm install --prod=false` → si no, Vite/TypeScript no se instalan (Render pone `NODE_ENV=production` también en el build).
+## Blueprint (`render.yaml`)
 
-## Comandos que se ejecutan
+Si creas el servicio con **New → Blueprint**, ya viene con `runtime: docker`.
 
-| Fase | Comando | Qué hace |
-|------|---------|----------|
-| Build | `pnpm build` | 1) `vite build` en `apps/web` → `apps/web/dist`<br>2) `tsc` en `apps/server` → `apps/server/dist` |
-| Start | `pnpm start` | `NODE_ENV=production node apps/server/dist/index.js` |
+## Probar la imagen en local
+
+```bash
+docker build -t deckora .
+docker run --rm -p 3000:3000 deckora
+# → http://localhost:3000
+# → http://localhost:3000/health
+```
 
 ## Problemas frecuentes
 
-**`vite: not found`**  
-Añade `--prod=false` al `pnpm install` del Build Command.
+**Cold start (plan free)**  
+Se duerme tras ~15 min; la primera visita tarda 30-60 s.
 
-**`EROFS` con corepack**  
-Usa `npm install -g pnpm@9` en lugar de `corepack enable`.
+**Build lento**  
+Normal la primera vez (instala deps + Vite). Luego cachea capas de Docker.
 
-**Cold start**  
-Plan free: se duerme tras ~15 min. La primera visita tarda 30-60 s.
-
-## Probar en local el modo producción
-
-```bash
-pnpm install
-pnpm build
-pnpm start
-# → http://localhost:3001
-```
+**Cambiar de Node a Docker**  
+En Settings cambia Environment a Docker, guarda y vuelve a desplegar. Ya no uses Build/Start Command manuales.
