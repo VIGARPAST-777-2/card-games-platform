@@ -14,6 +14,7 @@ import {
   SUPABASE_ANON_KEY,
   usingServiceRole,
 } from './db/supabase.js';
+import { userClient } from './db/userClient.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
@@ -38,15 +39,6 @@ async function authProfile(req: express.Request) {
   return profile;
 }
 
-/** Cliente autenticado (respeta RLS del usuario) */
-function userClient(token: string) {
-  const { createClient } = require('@supabase/supabase-js') as typeof import('@supabase/supabase-js');
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
-
 app.get('/health', async (_req, res) => {
   const db = await pingDb();
   res.json({
@@ -66,8 +58,7 @@ app.post('/api/store/buy', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const header = req.headers.authorization!;
-    const token = header.slice(7);
+    const token = req.headers.authorization!.slice(7);
     const sb = userClient(token);
     const itemId = req.body?.itemId as string;
     const { data: item } = await sb.from('store_items').select('*').eq('id', itemId).maybeSingle();
