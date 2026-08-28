@@ -7,7 +7,7 @@
     "dev": "pnpm --parallel --filter \"./apps/*\" dev",
     "dev:web": "pnpm --filter @deckora/web dev",
     "dev:server": "pnpm --filter @deckora/server dev",
-    "build": "pnpm --filter @deckora/web build && pnpm --filter @deckora/server build",
+    "build": "pnpm --filter @deckora/shared build && pnpm --filter @deckora/web build && pnpm --filter @deckora/server build",
     "build:web": "pnpm --filter @deckora/web build",
     "build:server": "pnpm --filter @deckora/server build",
     "start": "pnpm --filter @deckora/server start",
