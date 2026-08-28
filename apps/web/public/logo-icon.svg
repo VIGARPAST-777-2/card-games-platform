@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <rect width="120" height="120" rx="24" fill="#ffffff"/>
+  <!-- stack of cards, navy #0B1F3A -->
+  <g transform="translate(60 62) rotate(-18)">
+    <rect x="-34" y="-8" width="68" height="52" rx="10" fill="#0B1F3A"/>
+  </g>
+  <g transform="translate(60 56) rotate(-8)">
+    <rect x="-34" y="-8" width="68" height="52" rx="10" fill="#ffffff"/>
+    <rect x="-31" y="-5" width="62" height="46" rx="8" fill="#0B1F3A"/>
+  </g>
+  <g transform="translate(60 48) rotate(6)">
+    <rect x="-34" y="-8" width="68" height="52" rx="10" fill="#ffffff"/>
+    <rect x="-31" y="-5" width="62" height="46" rx="8" fill="#0B1F3A"/>
+  </g>
+</svg>
