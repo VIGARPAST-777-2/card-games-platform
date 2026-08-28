@@ -6,15 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import { MatchManager } from './match/MatchManager.js';
-import {
-  getSupabase,
-  isDbConfigured,
-  pingDb,
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY,
-  usingServiceRole,
-} from './db/supabase.js';
-import { userClient } from './db/userClient.js';
+import { getSupabase, isDbConfigured, pingDb } from './db/supabase.js';
+import { authProfile } from './db/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
@@ -24,21 +17,6 @@ const app = express();
 app.use(cors({ origin: isProd ? false : true }));
 app.use(express.json());
 
-async function authProfile(req: express.Request) {
-  const sb = getSupabase();
-  const header = req.headers.authorization;
-  if (!header?.startsWith('Bearer ')) return null;
-  const token = header.slice(7);
-  const { data: userData, error } = await sb.auth.getUser(token);
-  if (error || !userData.user) return null;
-  const { data: profile } = await sb
-    .from('profiles')
-    .select('*')
-    .eq('auth_user_id', userData.user.id)
-    .maybeSingle();
-  return profile;
-}
-
 app.get('/health', async (_req, res) => {
   const db = await pingDb();
   res.json({
@@ -46,20 +24,132 @@ app.get('/health', async (_req, res) => {
     service: 'deckora',
     ts: Date.now(),
     db: db.ok ? 'connected' : `error: ${db.error}`,
-    serviceRole: usingServiceRole(),
+    mode: 'service_role_only',
   });
 });
 
-app.get('/api/config', (_req, res) => {
-  res.json({ url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY });
+// ── Auth (todo por backend + service_role) ───────────────────────────────────
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    if (!isDbConfigured()) return res.status(503).json({ error: 'DB no configurada' });
+    const email = String(req.body?.email ?? '').trim();
+    const password = String(req.body?.password ?? '');
+    const username = String(req.body?.username ?? '').trim().toLowerCase();
+    if (!email || password.length < 6 || username.length < 3) {
+      return res.status(400).json({ error: 'Email, contraseña (≥6) y usuario (≥3) requeridos' });
+    }
+    const sb = getSupabase();
+    const { data: existing } = await sb.from('profiles').select('id').eq('username', username).maybeSingle();
+    if (existing) return res.status(400).json({ error: 'Usuario ya existe' });
+
+    const { data, error } = await sb.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { username },
+    });
+    if (error) return res.status(400).json({ error: error.message });
+
+    // Perfil: el trigger puede crearlo; aseguramos filas
+    if (data.user) {
+      await sb.from('profiles').upsert(
+        {
+          auth_user_id: data.user.id,
+          username,
+          coins: 500,
+          gems: 0,
+        },
+        { onConflict: 'auth_user_id' }
+      );
+    }
+
+    const login = await sb.auth.signInWithPassword({ email, password });
+    if (login.error || !login.data.session) {
+      return res.json({ ok: true, message: 'Cuenta creada. Inicia sesión.' });
+    }
+    const { data: profile } = await sb
+      .from('profiles')
+      .select(
+        'id, username, avatar_url, level, xp, wins, losses, games_played, coins, gems, current_streak, best_streak, season_pass_xp, season_pass_premium, title'
+      )
+      .eq('auth_user_id', data.user!.id)
+      .maybeSingle();
+
+    res.json({
+      access_token: login.data.session.access_token,
+      refresh_token: login.data.session.refresh_token,
+      expires_at: login.data.session.expires_at,
+      user: { id: data.user!.id, email },
+      profile,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e instanceof Error ? e.message : 'Error interno' });
+  }
 });
 
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    if (!isDbConfigured()) return res.status(503).json({ error: 'DB no configurada' });
+    const email = String(req.body?.email ?? '').trim();
+    const password = String(req.body?.password ?? '');
+    const sb = getSupabase();
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error || !data.session) return res.status(401).json({ error: error?.message ?? 'Login fallido' });
+    const { data: profile } = await sb
+      .from('profiles')
+      .select(
+        'id, username, avatar_url, level, xp, wins, losses, games_played, coins, gems, current_streak, best_streak, season_pass_xp, season_pass_premium, title'
+      )
+      .eq('auth_user_id', data.user.id)
+      .maybeSingle();
+    res.json({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+      expires_at: data.session.expires_at,
+      user: { id: data.user.id, email: data.user.email },
+      profile,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error interno' });
+  }
+});
+
+app.get('/api/auth/me', async (req, res) => {
+  try {
+    const profile = await authProfile(req);
+    if (!profile) return res.status(401).json({ error: 'No autenticado' });
+    const { auth_user_id, ...safe } = profile;
+    res.json({
+      user: { id: auth_user_id },
+      profile: safe,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error interno' });
+  }
+});
+
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    const header = req.headers.authorization;
+    if (header?.startsWith('Bearer ')) {
+      const sb = getSupabase();
+      await sb.auth.admin.signOut(header.slice(7));
+    }
+  } catch {
+    /* ignore */
+  }
+  res.json({ ok: true });
+});
+
+// ── Tienda ───────────────────────────────────────────────────────────────────
 app.post('/api/store/buy', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const token = req.headers.authorization!.slice(7);
-    const sb = userClient(token);
+    const sb = getSupabase();
     const itemId = req.body?.itemId as string;
     const { data: item } = await sb.from('store_items').select('*').eq('id', itemId).maybeSingle();
     if (!item?.active) return res.status(404).json({ error: 'Ítem no encontrado' });
@@ -92,12 +182,23 @@ app.post('/api/store/buy', async (req, res) => {
   }
 });
 
+app.get('/api/store/items', async (_req, res) => {
+  try {
+    const sb = getSupabase();
+    const { data } = await sb.from('store_items').select('*').eq('active', true);
+    res.json(data ?? []);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error interno' });
+  }
+});
+
+// ── Amigos ───────────────────────────────────────────────────────────────────
 app.post('/api/friends/request', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const token = req.headers.authorization!.slice(7);
-    const sb = userClient(token);
+    const sb = getSupabase();
     const username = String(req.body?.username ?? '').trim();
     const { data: other } = await sb.from('profiles').select('id, username').eq('username', username).maybeSingle();
     if (!other) return res.status(404).json({ error: 'Usuario no encontrado' });
@@ -122,12 +223,28 @@ app.post('/api/friends/request', async (req, res) => {
   }
 });
 
+app.get('/api/friends', async (req, res) => {
+  try {
+    const profile = await authProfile(req);
+    if (!profile) return res.status(401).json({ error: 'No autenticado' });
+    const sb = getSupabase();
+    const { data } = await sb
+      .from('friendships')
+      .select('id, status, requester_id, addressee_id')
+      .or(`requester_id.eq.${profile.id},addressee_id.eq.${profile.id}`);
+    res.json(data ?? []);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error interno' });
+  }
+});
+
+// ── Clubes ───────────────────────────────────────────────────────────────────
 app.post('/api/clubs', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const token = req.headers.authorization!.slice(7);
-    const sb = userClient(token);
+    const sb = getSupabase();
     const name = String(req.body?.name ?? '').trim();
     const tag = String(req.body?.tag ?? '').trim().toUpperCase().slice(0, 5);
     if (name.length < 3 || tag.length < 2) return res.status(400).json({ error: 'Nombre o tag inválido' });
@@ -149,12 +266,12 @@ app.post('/api/clubs', async (req, res) => {
   }
 });
 
+// ── Notificaciones ───────────────────────────────────────────────────────────
 app.get('/api/notifications', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const token = req.headers.authorization!.slice(7);
-    const sb = userClient(token);
+    const sb = getSupabase();
     const { data } = await sb
       .from('notifications')
       .select('id, kind, title, body, href, read, created_at')
@@ -168,12 +285,12 @@ app.get('/api/notifications', async (req, res) => {
   }
 });
 
+// ── Chat ─────────────────────────────────────────────────────────────────────
 app.get('/api/chat/threads', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const token = req.headers.authorization!.slice(7);
-    const sb = userClient(token);
+    const sb = getSupabase();
     const { data: parts } = await sb.from('chat_participants').select('thread_id').eq('profile_id', profile.id);
     const ids = (parts ?? []).map((p) => p.thread_id);
     if (!ids.length) return res.json([]);
@@ -208,8 +325,7 @@ app.post('/api/chat/dm', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const token = req.headers.authorization!.slice(7);
-    const sb = userClient(token);
+    const sb = getSupabase();
     const username = String(req.body?.username ?? '').trim();
     const { data: other } = await sb.from('profiles').select('id').eq('username', username).maybeSingle();
     if (!other) return res.status(404).json({ error: 'Usuario no encontrado' });
@@ -237,8 +353,7 @@ app.get('/api/chat/threads/:id/messages', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const token = req.headers.authorization!.slice(7);
-    const sb = userClient(token);
+    const sb = getSupabase();
     const { data: part } = await sb
       .from('chat_participants')
       .select('thread_id')
@@ -263,8 +378,7 @@ app.post('/api/chat/threads/:id/messages', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const token = req.headers.authorization!.slice(7);
-    const sb = userClient(token);
+    const sb = getSupabase();
     const body = String(req.body?.body ?? '').trim().slice(0, 2000);
     if (!body) return res.status(400).json({ error: 'Mensaje vacío' });
     const { data: part } = await sb
@@ -287,12 +401,12 @@ app.post('/api/chat/threads/:id/messages', async (req, res) => {
   }
 });
 
+// ── Apuestas ─────────────────────────────────────────────────────────────────
 app.get('/api/bets', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const token = req.headers.authorization!.slice(7);
-    const sb = userClient(token);
+    const sb = getSupabase();
     const { data } = await sb
       .from('bets')
       .select('id, amount, status, note, creator_id, opponent_id, created_at')
@@ -310,8 +424,7 @@ app.post('/api/bets', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const token = req.headers.authorization!.slice(7);
-    const sb = userClient(token);
+    const sb = getSupabase();
     const amount = Math.floor(Number(req.body?.amount));
     if (!amount || amount < 10) return res.status(400).json({ error: 'Mínimo 10 monedas' });
     if (amount > profile.coins) return res.status(400).json({ error: 'Saldo insuficiente' });
@@ -354,8 +467,7 @@ app.post('/api/bets/:id/accept', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const token = req.headers.authorization!.slice(7);
-    const sb = userClient(token);
+    const sb = getSupabase();
     const { data: bet } = await sb.from('bets').select('*').eq('id', req.params.id).maybeSingle();
     if (!bet || bet.status !== 'open') return res.status(400).json({ error: 'Apuesta no disponible' });
     if (bet.creator_id === profile.id) return res.status(400).json({ error: 'No puedes aceptar la tuya' });
@@ -404,5 +516,5 @@ if (fs.existsSync(webDistPath)) {
 
 httpServer.listen(PORT, () => {
   console.log(`🃏 Deckora on :${PORT}`);
-  console.log(`[db] ${isDbConfigured() ? 'ok' : 'missing'}`);
+  console.log(`[db] ${isDbConfigured() ? 'service_role' : 'MISSING SERVICE_ROLE_KEY'}`);
 });
