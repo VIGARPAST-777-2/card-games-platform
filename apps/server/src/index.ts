@@ -6,7 +6,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import { MatchManager } from './match/MatchManager.js';
-import { getSupabase, isDbConfigured, pingDb } from './db/supabase.js';
+import {
+  getSupabase,
+  isDbConfigured,
+  pingDb,
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  usingServiceRole,
+} from './db/supabase.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
@@ -18,7 +25,6 @@ app.use(express.json());
 
 async function authProfile(req: express.Request) {
   const sb = getSupabase();
-  if (!sb) return null;
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) return null;
   const token = header.slice(7);
@@ -32,32 +38,37 @@ async function authProfile(req: express.Request) {
   return profile;
 }
 
+/** Cliente autenticado (respeta RLS del usuario) */
+function userClient(token: string) {
+  const { createClient } = require('@supabase/supabase-js') as typeof import('@supabase/supabase-js');
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
 app.get('/health', async (_req, res) => {
   const db = await pingDb();
   res.json({
     status: 'ok',
     service: 'deckora',
     ts: Date.now(),
-    db: isDbConfigured() ? (db.ok ? 'connected' : `error: ${db.error}`) : 'not_configured',
+    db: db.ok ? 'connected' : `error: ${db.error}`,
+    serviceRole: usingServiceRole(),
   });
 });
 
 app.get('/api/config', (_req, res) => {
-  const url = process.env.SUPABASE_URL;
-  const anonKey = process.env.SUPABASE_ANON_KEY;
-  if (!url || !anonKey) {
-    res.status(503).json({ error: 'Config incompleta. Faltan SUPABASE_URL o SUPABASE_ANON_KEY' });
-    return;
-  }
-  res.json({ url, anonKey });
+  res.json({ url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY });
 });
 
-// ── Tienda ───────────────────────────────────────────────────────────────────
 app.post('/api/store/buy', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const sb = getSupabase()!;
+    const header = req.headers.authorization!;
+    const token = header.slice(7);
+    const sb = userClient(token);
     const itemId = req.body?.itemId as string;
     const { data: item } = await sb.from('store_items').select('*').eq('id', itemId).maybeSingle();
     if (!item?.active) return res.status(404).json({ error: 'Ítem no encontrado' });
@@ -66,9 +77,7 @@ app.post('/api/store/buy', async (req, res) => {
     }
     let newCoins = profile.coins - item.price_coins;
     const newGems = (profile.gems ?? 0) - item.price_gems;
-    if (item.kind === 'currency_pack') {
-      newCoins += Number(item.payload?.coins ?? 1000);
-    }
+    if (item.kind === 'currency_pack') newCoins += Number(item.payload?.coins ?? 1000);
     await sb.from('profiles').update({
       coins: newCoins,
       gems: newGems,
@@ -92,12 +101,12 @@ app.post('/api/store/buy', async (req, res) => {
   }
 });
 
-// ── Amigos ───────────────────────────────────────────────────────────────────
 app.post('/api/friends/request', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const sb = getSupabase()!;
+    const token = req.headers.authorization!.slice(7);
+    const sb = userClient(token);
     const username = String(req.body?.username ?? '').trim();
     const { data: other } = await sb.from('profiles').select('id, username').eq('username', username).maybeSingle();
     if (!other) return res.status(404).json({ error: 'Usuario no encontrado' });
@@ -122,12 +131,12 @@ app.post('/api/friends/request', async (req, res) => {
   }
 });
 
-// ── Clubes ───────────────────────────────────────────────────────────────────
 app.post('/api/clubs', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const sb = getSupabase()!;
+    const token = req.headers.authorization!.slice(7);
+    const sb = userClient(token);
     const name = String(req.body?.name ?? '').trim();
     const tag = String(req.body?.tag ?? '').trim().toUpperCase().slice(0, 5);
     if (name.length < 3 || tag.length < 2) return res.status(400).json({ error: 'Nombre o tag inválido' });
@@ -138,12 +147,7 @@ app.post('/api/clubs', async (req, res) => {
       .single();
     if (error) return res.status(400).json({ error: error.message });
     await sb.from('club_members').insert({ club_id: club.id, profile_id: profile.id, role: 'owner' });
-    // hilo de chat del club
-    const { data: thread } = await sb
-      .from('chat_threads')
-      .insert({ kind: 'club', club_id: club.id })
-      .select('id')
-      .single();
+    const { data: thread } = await sb.from('chat_threads').insert({ kind: 'club', club_id: club.id }).select('id').single();
     if (thread) {
       await sb.from('chat_participants').insert({ thread_id: thread.id, profile_id: profile.id });
     }
@@ -154,12 +158,12 @@ app.post('/api/clubs', async (req, res) => {
   }
 });
 
-// ── Notificaciones ───────────────────────────────────────────────────────────
 app.get('/api/notifications', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const sb = getSupabase()!;
+    const token = req.headers.authorization!.slice(7);
+    const sb = userClient(token);
     const { data } = await sb
       .from('notifications')
       .select('id, kind, title, body, href, read, created_at')
@@ -173,16 +177,13 @@ app.get('/api/notifications', async (req, res) => {
   }
 });
 
-// ── Chat ─────────────────────────────────────────────────────────────────────
 app.get('/api/chat/threads', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const sb = getSupabase()!;
-    const { data: parts } = await sb
-      .from('chat_participants')
-      .select('thread_id')
-      .eq('profile_id', profile.id);
+    const token = req.headers.authorization!.slice(7);
+    const sb = userClient(token);
+    const { data: parts } = await sb.from('chat_participants').select('thread_id').eq('profile_id', profile.id);
     const ids = (parts ?? []).map((p) => p.thread_id);
     if (!ids.length) return res.json([]);
     const { data: threads } = await sb.from('chat_threads').select('id, kind, club_id').in('id', ids);
@@ -199,11 +200,7 @@ app.get('/api/chat/threads', async (req, res) => {
           .eq('thread_id', th.id)
           .neq('profile_id', profile.id);
         if (others?.[0]) {
-          const { data: p } = await sb
-            .from('profiles')
-            .select('username')
-            .eq('id', others[0].profile_id)
-            .maybeSingle();
+          const { data: p } = await sb.from('profiles').select('username').eq('id', others[0].profile_id).maybeSingle();
           label = p?.username ?? 'DM';
         } else label = 'DM';
       }
@@ -220,7 +217,8 @@ app.post('/api/chat/dm', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const sb = getSupabase()!;
+    const token = req.headers.authorization!.slice(7);
+    const sb = userClient(token);
     const username = String(req.body?.username ?? '').trim();
     const { data: other } = await sb.from('profiles').select('id').eq('username', username).maybeSingle();
     if (!other) return res.status(404).json({ error: 'Usuario no encontrado' });
@@ -248,7 +246,8 @@ app.get('/api/chat/threads/:id/messages', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const sb = getSupabase()!;
+    const token = req.headers.authorization!.slice(7);
+    const sb = userClient(token);
     const { data: part } = await sb
       .from('chat_participants')
       .select('thread_id')
@@ -273,7 +272,8 @@ app.post('/api/chat/threads/:id/messages', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const sb = getSupabase()!;
+    const token = req.headers.authorization!.slice(7);
+    const sb = userClient(token);
     const body = String(req.body?.body ?? '').trim().slice(0, 2000);
     if (!body) return res.status(400).json({ error: 'Mensaje vacío' });
     const { data: part } = await sb
@@ -296,12 +296,12 @@ app.post('/api/chat/threads/:id/messages', async (req, res) => {
   }
 });
 
-// ── Apuestas (solo monedas de juego) ─────────────────────────────────────────
 app.get('/api/bets', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const sb = getSupabase()!;
+    const token = req.headers.authorization!.slice(7);
+    const sb = userClient(token);
     const { data } = await sb
       .from('bets')
       .select('id, amount, status, note, creator_id, opponent_id, created_at')
@@ -319,7 +319,8 @@ app.post('/api/bets', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const sb = getSupabase()!;
+    const token = req.headers.authorization!.slice(7);
+    const sb = userClient(token);
     const amount = Math.floor(Number(req.body?.amount));
     if (!amount || amount < 10) return res.status(400).json({ error: 'Mínimo 10 monedas' });
     if (amount > profile.coins) return res.status(400).json({ error: 'Saldo insuficiente' });
@@ -337,13 +338,8 @@ app.post('/api/bets', async (req, res) => {
         href: '/bets',
       });
     }
-    // retenemos monedas del creador
     await sb.from('profiles').update({ coins: profile.coins - amount }).eq('id', profile.id);
-    await sb.from('coin_ledger').insert({
-      profile_id: profile.id,
-      amount: -amount,
-      reason: 'bet_lock',
-    });
+    await sb.from('coin_ledger').insert({ profile_id: profile.id, amount: -amount, reason: 'bet_lock' });
     const { data: bet, error } = await sb
       .from('bets')
       .insert({
@@ -367,17 +363,14 @@ app.post('/api/bets/:id/accept', async (req, res) => {
   try {
     const profile = await authProfile(req);
     if (!profile) return res.status(401).json({ error: 'No autenticado' });
-    const sb = getSupabase()!;
+    const token = req.headers.authorization!.slice(7);
+    const sb = userClient(token);
     const { data: bet } = await sb.from('bets').select('*').eq('id', req.params.id).maybeSingle();
     if (!bet || bet.status !== 'open') return res.status(400).json({ error: 'Apuesta no disponible' });
     if (bet.creator_id === profile.id) return res.status(400).json({ error: 'No puedes aceptar la tuya' });
     if (profile.coins < bet.amount) return res.status(400).json({ error: 'Saldo insuficiente' });
     await sb.from('profiles').update({ coins: profile.coins - bet.amount }).eq('id', profile.id);
-    await sb.from('coin_ledger').insert({
-      profile_id: profile.id,
-      amount: -bet.amount,
-      reason: 'bet_lock',
-    });
+    await sb.from('coin_ledger').insert({ profile_id: profile.id, amount: -bet.amount, reason: 'bet_lock' });
     await sb.from('bets').update({ status: 'accepted', opponent_id: profile.id }).eq('id', bet.id);
     await sb.from('notifications').insert({
       profile_id: bet.creator_id,
@@ -420,5 +413,5 @@ if (fs.existsSync(webDistPath)) {
 
 httpServer.listen(PORT, () => {
   console.log(`🃏 Deckora on :${PORT}`);
-  console.log(`[db] ${isDbConfigured() ? 'ok' : 'missing env'}`);
+  console.log(`[db] ${isDbConfigured() ? 'ok' : 'missing'}`);
 });
