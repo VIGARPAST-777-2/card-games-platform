@@ -13,6 +13,8 @@ const NAV = [
   { to: '/pass', label: 'Pase' },
   { to: '/friends', label: 'Amigos' },
   { to: '/clubs', label: 'Clubes' },
+  { to: '/chat', label: 'Chat' },
+  { to: '/bets', label: 'Apuestas' },
 ];
 
 export function Layout({ children }: Props) {
@@ -20,14 +22,16 @@ export function Layout({ children }: Props) {
   const { profile, user, signOut } = useAuthStore();
 
   return (
-    <div className="min-h-dvh flex flex-col bg-cream-100">
-      <header className="border-b border-navy-100 bg-white/90 backdrop-blur sticky top-0 z-50 shadow-soft">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center gap-4">
+    <div className="min-h-dvh flex flex-col bg-cream-100 font-sans">
+      <header className="border-b border-navy-100 bg-white sticky top-0 z-50 shadow-soft">
+        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
           <Link to="/" className="flex items-center gap-2 shrink-0">
-            <img src="/logo-icon.svg" alt="" className="w-9 h-9" />
-            <span className="font-display text-xl text-navy-900 tracking-tight hidden sm:inline">
-              Deckora
-            </span>
+            <img src="/logo-icon.svg" alt="" className="w-8 h-8" />
+            <img
+              src="/deckora-wordmark.svg"
+              alt="Deckora"
+              className="h-7 hidden sm:block"
+            />
           </Link>
 
           <nav className="flex-1 flex gap-0.5 overflow-x-auto text-sm font-medium">
@@ -40,7 +44,7 @@ export function Layout({ children }: Props) {
                 <Link
                   key={item.to}
                   to={item.to}
-                  className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition ${
+                  className={`px-2.5 py-1.5 rounded-md whitespace-nowrap ${
                     active
                       ? 'bg-navy-900 text-white'
                       : 'text-navy-700 hover:bg-navy-50'
@@ -52,35 +56,34 @@ export function Layout({ children }: Props) {
             })}
           </nav>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 text-sm">
+            {user && (
+              <Link
+                to="/notifications"
+                className="text-navy-600 hover:text-navy-900 px-2"
+                title="Notificaciones"
+              >
+                🔔
+              </Link>
+            )}
             {profile && (
-              <div className="hidden md:flex items-center gap-2 text-sm text-navy-800">
-                <span className="rounded-full bg-gold-400/20 text-gold-600 px-2.5 py-0.5 font-semibold">
-                  {profile.coins.toLocaleString()} 🪙
-                </span>
-                <span className="text-navy-500">🔥 {profile.current_streak}</span>
-              </div>
+              <span className="hidden md:inline rounded-full bg-navy-50 text-navy-800 px-2.5 py-0.5 font-medium">
+                {profile.coins.toLocaleString()} 🪙
+              </span>
             )}
             {user ? (
               <>
-                <Link
-                  to="/profile"
-                  className="text-sm font-medium text-navy-800 hover:text-navy-600"
-                >
+                <Link to="/profile" className="font-medium text-navy-900">
                   {profile?.username ?? 'Perfil'}
                 </Link>
-                <button
-                  type="button"
-                  onClick={() => signOut()}
-                  className="text-xs text-navy-500 hover:text-navy-800"
-                >
+                <button type="button" onClick={() => signOut()} className="text-navy-500 text-xs">
                   Salir
                 </button>
               </>
             ) : (
               <Link
                 to="/auth"
-                className="rounded-lg bg-navy-900 text-white text-sm font-medium px-3 py-1.5 hover:bg-navy-800"
+                className="rounded-md bg-navy-900 text-white px-3 py-1.5 font-medium"
               >
                 Entrar
               </Link>
@@ -91,9 +94,10 @@ export function Layout({ children }: Props) {
 
       <main className="flex-1">{children}</main>
 
-      <footer className="border-t border-navy-100 py-5 text-center text-xs text-navy-400 bg-white">
-        <span className="font-display text-navy-900">Deckora</span>
-        {' · '}Juegos de cartas · 2026
+      <footer className="border-t border-navy-100 py-4 text-center text-xs text-navy-400 bg-white">
+        <img src="/deckora-wordmark.svg" alt="Deckora" className="h-5 inline-block opacity-80" />
+        <span className="mx-2">·</span>
+        Juegos de cartas · 2026
       </footer>
     </div>
   );
