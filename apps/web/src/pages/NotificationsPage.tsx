@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getSupabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
 
 interface Notif {
@@ -20,11 +20,8 @@ export function NotificationsPage() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const token = (await (await getSupabase())?.auth.getSession())?.data.session?.access_token;
-      const res = await fetch('/api/notifications', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) setItems(await res.json());
+      const { ok, data } = await api<Notif[]>('/api/notifications');
+      if (ok) setItems(data);
     })();
   }, [user]);
 
