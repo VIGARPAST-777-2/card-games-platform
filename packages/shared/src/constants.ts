@@ -1,4 +1,4 @@
-import type { GameId, RankTier } from './types';
+import type { GameId, RankTier } from './types.js';
 
 export const GAMES: Record<GameId, { name: string; minPlayers: number; maxPlayers: number }> = {
   poker: { name: 'Poker', minPlayers: 2, maxPlayers: 8 },
@@ -19,13 +19,13 @@ export const RANK_TIERS: RankTier[] = [
   'master',
 ];
 
-export const RANK_DIVISIONS = 3; // I, II, III
+export const RANK_DIVISIONS = 3;
 
 export const XP_PER_LEVEL = 1000;
 export const XP_WIN_BASE = 50;
 export const XP_LOSS_BASE = 15;
 
-export const DISCONNECT_GRACE_MS = 60_000; // 60s antes de bot permanente / abandon
+export const DISCONNECT_GRACE_MS = 60_000;
 export const TURN_TIMEOUT_MS = 30_000;
 
 export const BOT_LEVEL_RANGE = {
