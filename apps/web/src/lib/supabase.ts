@@ -1,28 +1,34 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-let client: SupabaseClient | null = null;
-let initPromise: Promise<SupabaseClient | null> | null = null;
+/** Proyecto Deckora — anon key es pública por diseño */
+const DEFAULT_URL = 'https://ntaioerwelnqurhgjdqq.supabase.co';
+const DEFAULT_ANON =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im50YWlvZXJ3ZWxucXVyaGdqZHFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MzA4NzEsImV4cCI6MjEwMzUwNjg3MX0.pUldyhLR4eo-fOAzJtdPU3ksgMDE_2O4IjoRYNvRo1o';
 
-async function loadConfig(): Promise<{ url: string; anonKey: string } | null> {
+let client: SupabaseClient | null = null;
+let initPromise: Promise<SupabaseClient> | null = null;
+
+async function loadConfig(): Promise<{ url: string; anonKey: string }> {
   try {
     const res = await fetch('/api/config');
-    if (!res.ok) return null;
-    return res.json();
+    if (res.ok) {
+      const data = await res.json();
+      if (data.url && data.anonKey) return data;
+    }
   } catch {
-    // Dev fallback
-    const url = import.meta.env.VITE_SUPABASE_URL;
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    if (url && anonKey) return { url, anonKey };
-    return null;
+    /* ignore */
   }
+  return {
+    url: import.meta.env.VITE_SUPABASE_URL || DEFAULT_URL,
+    anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_ANON,
+  };
 }
 
-export async function getSupabase(): Promise<SupabaseClient | null> {
+export async function getSupabase(): Promise<SupabaseClient> {
   if (client) return client;
   if (!initPromise) {
     initPromise = (async () => {
       const cfg = await loadConfig();
-      if (!cfg) return null;
       client = createClient(cfg.url, cfg.anonKey, {
         auth: {
           persistSession: true,
