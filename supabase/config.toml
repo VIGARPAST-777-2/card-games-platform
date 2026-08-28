@@ -1,0 +1,12 @@
+# Config mínima para Supabase CLI (migraciones desde CI)
+# https://supabase.com/docs/guides/cli/config
+
+[project]
+# El project_id se enlaza en CI con SUPABASE_PROJECT_ID
+
+[db]
+port = 54322
+major_version = 15
+
+[api]
+enabled = true
