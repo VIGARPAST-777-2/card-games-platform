@@ -89,7 +89,7 @@ Frontend y backend viven en **un único Web Service** (ideal para Render free).
 
 ```bash
 # Requiere Node 20+ y pnpm
-corepack enable
+npm install -g pnpm@9   # o: corepack enable (en local sí funciona)
 pnpm install
 
 # Terminal 1 — backend
@@ -122,15 +122,17 @@ pnpm dev:web
 | Campo | Valor |
 |-------|--------|
 | **Runtime** | Node |
-| **Build Command** | `corepack enable && pnpm install && pnpm build` |
+| **Build Command** | `npm install -g pnpm@9 && pnpm install && pnpm build` |
 | **Start Command** | `pnpm start` |
 | **Instance type** | Free |
 
-4. Variables de entorno (opcionales):
+4. Variables de entorno:
    - `NODE_ENV` = `production`
-   - `NODE_VERSION` = `20`
+   - `NODE_VERSION` = `22`
 
 5. Health Check Path: `/health`
+
+> ⚠️ **No uses** `corepack enable` en Render → falla con `EROFS` (sistema de archivos de solo lectura).
 
 ### Qué hace el build
 
