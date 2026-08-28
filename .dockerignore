@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+.gitignore
+*.md
+.env
+.env.*
+.DS_Store
+.vscode
+.idea
+coverage
+**/*.log
+.turbo
+.cache
+apps/web/dev-dist
