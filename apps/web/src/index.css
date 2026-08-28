@@ -11,8 +11,24 @@ body {
   min-height: 100dvh;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(ellipse at top, #144f36 0%, transparent 55%),
+    linear-gradient(180deg, #1a150e 0%, #0c2e20 40%, #061a12 100%);
+  color: #f7f1e6;
 }
 
 #root {
   min-height: 100dvh;
+}
+
+/* Scrollbar discreta */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #1a150e;
+}
+::-webkit-scrollbar-thumb {
+  background: #4a3c2a;
+  border-radius: 4px;
 }
