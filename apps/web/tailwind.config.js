@@ -22,17 +22,23 @@ export default {
           100: '#faf9f7',
           200: '#f3f1ec',
           300: '#e8e4db',
-          400: '#d4cfc3',
         },
         gold: {
           400: '#c9a84c',
           500: '#b8922f',
-          600: '#9a7824',
         },
       },
       fontFamily: {
-        display: ['"Libre Baskerville"', 'Georgia', 'Times New Roman', 'serif'],
-        sans: ['"Source Sans 3"', 'system-ui', 'sans-serif'],
+        brand: ['Georgia', 'Times New Roman', 'Times', 'serif'],
+        sans: [
+          'system-ui',
+          '-apple-system',
+          'Segoe UI',
+          'Roboto',
+          'Helvetica Neue',
+          'Arial',
+          'sans-serif',
+        ],
       },
       boxShadow: {
         soft: '0 4px 20px rgba(11, 31, 58, 0.08)',
