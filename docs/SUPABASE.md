@@ -1,25 +1,21 @@
-# Supabase · Deckora
+# Supabase + Render
 
-**Proyecto:** Deckora (`ntaioerwelnqurhgjdqq`)  
-**URL:** `https://ntaioerwelnqurhgjdqq.supabase.co`
+Proyecto **Deckora** · `ntaioerwelnqurhgjdqq`  
+URL: `https://ntaioerwelnqurhgjdqq.supabase.co`
 
-## Variables en Render (Environment)
+## Qué poner en Render (Environment)
 
-| Key | Valor |
-|-----|--------|
+| Variable | Dónde está en Supabase |
+|----------|------------------------|
 | `SUPABASE_URL` | `https://ntaioerwelnqurhgjdqq.supabase.co` |
-| `SUPABASE_ANON_KEY` | Settings → API → `anon` `public` |
-| `SUPABASE_SERVICE_ROLE_KEY` | Settings → API → `service_role` (**solo server**) |
+| `SUPABASE_ANON_KEY` | **Settings → API →** clave `anon` `public` |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Settings → API →** `service_role` (secreta, solo backend) |
 
-Tras guardar → **Manual Deploy**.  
-`/health` debe mostrar `"db":"connected"`.  
-`/api/config` debe devolver `url` + `anonKey` (para login en el navegador).
+Sin estas tres el login y la DB no funcionan en producción.
 
-## Auth
+Grok **sí** puede editar el esquema por MCP.  
+Grok **no** puede escribir las keys en Render: tienes que pegarlas tú una vez.
 
-- Registro / login con email + contraseña (Supabase Auth)
-- Trigger `handle_new_user` crea fila en `profiles` (500 monedas)
+## Funciones de plataforma
 
-## Tablas
-
-profiles (coins, gems, streaks, pass), player_ranks, match_*, cosmetics, friendships, clubs, club_members, store_items, coin_ledger, missions, profile_missions
+Auth, perfiles, monedas, tienda, amigos, clubes, chat (DM + club), notificaciones, apuestas (solo monedas de juego), pase y misiones.
