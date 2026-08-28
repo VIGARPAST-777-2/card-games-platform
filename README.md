@@ -88,8 +88,7 @@ Frontend y backend viven en **un único Web Service** (ideal para Render free).
 ## 🚀 Desarrollo local
 
 ```bash
-# Requiere Node 20+ y pnpm
-npm install -g pnpm@9   # o: corepack enable (en local sí funciona)
+npm install -g pnpm@9
 pnpm install
 
 # Terminal 1 — backend
@@ -106,50 +105,29 @@ pnpm dev:web
 
 ## 🌐 Desplegar en Render (todo en uno)
 
-### Opción A — Blueprint (recomendada)
+### Opción A — Blueprint
 
-1. Entra en [render.com](https://render.com) y conecta tu cuenta de GitHub.
-2. **New → Blueprint**
-3. Selecciona el repositorio `card-games-platform`
-4. Render leerá `render.yaml` y creará el servicio automáticamente.
+1. [render.com](https://render.com) → **New → Blueprint**
+2. Selecciona el repo `card-games-platform`
+3. Render usa `render.yaml`
 
 ### Opción B — Manual
-
-1. **New → Web Service**
-2. Conecta el repo
-3. Configura:
 
 | Campo | Valor |
 |-------|--------|
 | **Runtime** | Node |
-| **Build Command** | `npm install -g pnpm@9 && pnpm install && pnpm build` |
+| **Build Command** | `npm install -g pnpm@9 && pnpm install --include=dev && pnpm build` |
 | **Start Command** | `pnpm start` |
 | **Instance type** | Free |
 
-4. Variables de entorno:
-   - `NODE_ENV` = `production`
-   - `NODE_VERSION` = `22`
+Variables de entorno:
+- `NODE_VERSION` = `22`
 
-5. Health Check Path: `/health`
+> No pongas `NODE_ENV=production` en las env vars del servicio (rompe el install de vite en el build). El server ya lo activa al arrancar.
 
-> ⚠️ **No uses** `corepack enable` en Render → falla con `EROFS` (sistema de archivos de solo lectura).
+Health Check Path: `/health`
 
-### Qué hace el build
-
-```
-pnpm build
-  → construye apps/web (Vite → dist)
-  → construye apps/server (tsc → dist)
-
-pnpm start
-  → NODE_ENV=production node apps/server/dist/index.js
-  → Express sirve los archivos de apps/web/dist
-  → Socket.io en el mismo puerto
-```
-
-En producción el cliente se conecta al **mismo origen** (no hace falta `VITE_SERVER_URL`).
-
-> ⚠️ Plan free de Render: el servicio se duerme tras ~15 min de inactividad. La primera petición puede tardar 30-60 s en despertar.
+> ⚠️ Plan free: se duerme tras ~15 min. Primera petición ~30-60 s.
 
 ---
 
@@ -169,9 +147,9 @@ pnpm start
 - [x] Monorepo + tipos compartidos
 - [x] Servidor con MatchManager + bots de reconexión
 - [x] Frontend PWA base
-- [x] **Deploy unificado (frontend + backend en un solo servicio)**
-- [ ] Primer juego completo (módulo)
-- [ ] Auth y perfiles reales
+- [x] Deploy unificado (un solo servicio Render)
+- [ ] Primer juego completo
+- [ ] Auth y perfiles
 - [ ] Matchmaking y ranked
 
 ---
@@ -179,7 +157,3 @@ pnpm start
 ## 📄 Licencia
 
 MIT
-
----
-
-Hecho con ❤️ para la comunidad de juegos de cartas.
