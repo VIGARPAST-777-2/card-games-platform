@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 72" role="img" aria-label="Deckora">
+  <!-- Recreación limpia del wordmark: serif clásica, navy #0B1F3A (como la imagen de marca) -->
+  <text
+    x="4"
+    y="52"
+    font-family="Georgia, 'Times New Roman', Times, serif"
+    font-size="52"
+    font-weight="400"
+    fill="#0B1F3A"
+    letter-spacing="-0.8"
+  >Deckora</text>
+</svg>
