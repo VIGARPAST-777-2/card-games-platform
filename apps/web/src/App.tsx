@@ -9,6 +9,9 @@ import { StorePage } from './pages/StorePage';
 import { FriendsPage } from './pages/FriendsPage';
 import { ClubsPage } from './pages/ClubsPage';
 import { PassPage } from './pages/PassPage';
+import { ChatPage } from './pages/ChatPage';
+import { BetsPage } from './pages/BetsPage';
+import { NotificationsPage } from './pages/NotificationsPage';
 import { useAuthStore } from './store/authStore';
 
 export default function App() {
@@ -30,6 +33,9 @@ export default function App() {
         <Route path="/friends" element={<FriendsPage />} />
         <Route path="/clubs" element={<ClubsPage />} />
         <Route path="/pass" element={<PassPage />} />
+        <Route path="/chat" element={<ChatPage />} />
+        <Route path="/bets" element={<BetsPage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
       </Routes>
     </Layout>
   );
