@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api, getToken, setToken } from '../lib/api';
+import type { Lang } from '../i18n';
 
 export interface Profile {
   id: string;
@@ -17,6 +18,9 @@ export interface Profile {
   season_pass_xp: number;
   season_pass_premium: boolean;
   title: string | null;
+  is_admin?: boolean;
+  is_banned?: boolean;
+  language?: string;
 }
 
 interface AuthUser {
@@ -28,17 +32,31 @@ interface AuthState {
   ready: boolean;
   user: AuthUser | null;
   profile: Profile | null;
+  lang: Lang;
   init: () => Promise<void>;
   signUp: (email: string, password: string, username: string) => Promise<string | null>;
   signIn: (email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  setLang: (lang: Lang) => void;
+}
+
+function loadLang(): Lang {
+  const v = localStorage.getItem('deckora_lang');
+  if (v === 'en' || v === 'fr' || v === 'es') return v;
+  return 'es';
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   ready: false,
   user: null,
   profile: null,
+  lang: loadLang(),
+
+  setLang: (lang) => {
+    localStorage.setItem('deckora_lang', lang);
+    set({ lang });
+  },
 
   init: async () => {
     const token = getToken();
@@ -48,7 +66,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
     const { ok, data } = await api<{ user?: AuthUser; profile?: Profile }>('/api/auth/me');
     if (ok && data.user) {
-      set({ user: data.user, profile: data.profile ?? null, ready: true });
+      set({
+        user: data.user,
+        profile: data.profile ?? null,
+        ready: true,
+        lang: (data.profile?.language as Lang) || loadLang(),
+      });
     } else {
       setToken(null);
       set({ user: null, profile: null, ready: true });
@@ -65,7 +88,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       method: 'POST',
       body: JSON.stringify({ email, password, username }),
     });
-    if (!ok) return data.error ?? 'Error de registro';
+    if (!ok) return data.error ?? 'Error';
     if (data.access_token) {
       setToken(data.access_token);
       set({ user: data.user ?? null, profile: data.profile ?? null });
@@ -83,7 +106,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    if (!ok) return data.error ?? 'Error de login';
+    if (!ok) return data.error ?? 'Error';
     if (data.access_token) {
       setToken(data.access_token);
       set({ user: data.user ?? null, profile: data.profile ?? null });
