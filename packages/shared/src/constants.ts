@@ -1,14 +1,40 @@
-import type { GameId, RankTier } from './types.js';
+import type { RankTier } from './types.js';
 
-export const GAMES: Record<GameId, { name: string; minPlayers: number; maxPlayers: number }> = {
-  poker: { name: 'Poker', minPlayers: 2, maxPlayers: 8 },
-  blackjack: { name: 'Blackjack', minPlayers: 1, maxPlayers: 7 },
-  rummy: { name: 'Rummy', minPlayers: 2, maxPlayers: 6 },
-  hearts: { name: 'Hearts', minPlayers: 4, maxPlayers: 4 },
-  spades: { name: 'Spades', minPlayers: 4, maxPlayers: 4 },
-  tute: { name: 'Tute', minPlayers: 2, maxPlayers: 4 },
-  mus: { name: 'Mus', minPlayers: 4, maxPlayers: 4 },
+export type PokerVariant = 'holdem' | 'omaha';
+
+export const POKER_VARIANTS: Record<
+  PokerVariant,
+  { nameEs: string; nameEn: string; nameFr: string; holeCards: number }
+> = {
+  holdem: {
+    nameEs: 'Texas Hold\'em',
+    nameEn: 'Texas Hold\'em',
+    nameFr: 'Texas Hold\'em',
+    holeCards: 2,
+  },
+  omaha: {
+    nameEs: 'Omaha',
+    nameEn: 'Omaha',
+    nameFr: 'Omaha',
+    holeCards: 4,
+  },
 };
+
+/** Recomendado: más jugado y más rápido de llenar */
+export const RECOMMENDED = {
+  variant: 'holdem' as PokerVariant,
+  tableSize: 6,
+  reasonEs: 'Mas jugado y salas mas rapidas',
+  reasonEn: 'Most played and fastest lobbies',
+  reasonFr: 'Le plus joue et lobbies plus rapides',
+};
+
+export const TABLE_SIZES = [2, 4, 6, 8, 9] as const;
+
+/** Partidas online normales: 10 minutos */
+export const ONLINE_MATCH_MS = 10 * 60 * 1000;
+
+export const PRIVATE_TIME_OPTIONS_MIN = [5, 10, 15, 20, 30] as const;
 
 export const RANK_TIERS: RankTier[] = [
   'bronze',
@@ -22,13 +48,7 @@ export const RANK_TIERS: RankTier[] = [
 export const RANK_DIVISIONS = 3;
 
 export const XP_PER_LEVEL = 1000;
-export const XP_WIN_BASE = 50;
-export const XP_LOSS_BASE = 15;
-
 export const DISCONNECT_GRACE_MS = 60_000;
 export const TURN_TIMEOUT_MS = 30_000;
 
-export const BOT_LEVEL_RANGE = {
-  min: 100,
-  max: 3000,
-};
+export const DEFAULT_STARTING_MMR = 800;
