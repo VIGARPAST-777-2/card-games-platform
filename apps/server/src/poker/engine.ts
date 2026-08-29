@@ -38,15 +38,9 @@ export interface PokerTable {
   smallBlind: number;
   bigBlind: number;
   handNumber: number;
+  holeCards: number;
 }
 
-const RANK_ORDER = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'] as const;
-
-function rankVal(r: string): number {
-  return RANK_ORDER.indexOf(r as (typeof RANK_ORDER)[number]);
-}
-
-/** Evalúa 7 cartas -> score comparable (mayor gana) */
 export function evaluateHand(cards: Card[]): { score: number; name: string } {
   if (cards.length < 5) return { score: 0, name: 'incomplete' };
   const vals = cards.map((c) => getCardValue(c, true)).sort((a, b) => b - a);
@@ -55,9 +49,9 @@ export function evaluateHand(cards: Card[]): { score: number; name: string } {
   for (const v of vals) counts.set(v, (counts.get(v) ?? 0) + 1);
   const groups = [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0]);
 
-  const isFlush = SUITS_FLUSH(suits);
+  const isFlush = suitsFlush(suits);
   const uniqueSorted = [...new Set(vals)].sort((a, b) => b - a);
-  const straightHigh = STRAIGHT_HIGH(uniqueSorted);
+  const straightHigh = straightHighFn(uniqueSorted);
 
   if (isFlush && straightHigh === 14) return { score: 8e12 + 14, name: 'royal_flush' };
   if (isFlush && straightHigh) return { score: 8e12 + straightHigh, name: 'straight_flush' };
@@ -70,21 +64,24 @@ export function evaluateHand(cards: Card[]): { score: number; name: string } {
     return { score: 3e12 + groups[0][0] * 1e4 + kickers(groups, 2), name: 'three_kind' };
   if (groups[0][1] === 2 && groups[1]?.[1] === 2)
     return {
-      score: 2e12 + Math.max(groups[0][0], groups[1][0]) * 1e4 + Math.min(groups[0][0], groups[1][0]) * 100 + (groups[2]?.[0] ?? 0),
+      score:
+        2e12 +
+        Math.max(groups[0][0], groups[1][0]) * 1e4 +
+        Math.min(groups[0][0], groups[1][0]) * 100 +
+        (groups[2]?.[0] ?? 0),
       name: 'two_pair',
     };
   if (groups[0][1] === 2) return { score: 1e12 + groups[0][0] * 1e4 + kickers(groups, 3), name: 'pair' };
   return { score: vals.slice(0, 5).reduce((s, v, i) => s + v * 15 ** (4 - i), 0), name: 'high_card' };
 }
 
-function SUITS_FLUSH(suits: string[]): boolean {
+function suitsFlush(suits: string[]): boolean {
   const m = new Map<string, number>();
   for (const s of suits) m.set(s, (m.get(s) ?? 0) + 1);
   return [...m.values()].some((n) => n >= 5);
 }
 
-function STRAIGHT_HIGH(uniqueDesc: number[]): number | null {
-  // wheel A-5
+function straightHighFn(uniqueDesc: number[]): number | null {
   const set = new Set(uniqueDesc);
   if ([14, 5, 4, 3, 2].every((x) => set.has(x))) return 5;
   for (let h = 14; h >= 5; h--) {
@@ -122,11 +119,14 @@ export function createTable(
     smallBlind: blinds.sb,
     bigBlind: blinds.bb,
     handNumber: 0,
+    holeCards: 2,
   };
 }
 
-export function startHand(table: PokerTable): PokerTable {
+/** holeCards: 2 Hold'em, 4 Omaha */
+export function startHand(table: PokerTable, holeCards = 2): PokerTable {
   const t = structuredClone(table) as PokerTable;
+  t.holeCards = holeCards;
   t.deck = createShuffledDeck();
   t.community = [];
   t.pot = 0;
@@ -141,8 +141,7 @@ export function startHand(table: PokerTable): PokerTable {
     s.folded = false;
     s.allIn = false;
   }
-  // deal 2
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < holeCards; i++) {
     for (const s of t.seats) {
       if (s.chips > 0) s.hole.push(t.deck.pop()!);
     }
@@ -168,14 +167,10 @@ function postBlind(t: PokerTable, idx: number, amount: number) {
   if (s.chips === 0) s.allIn = true;
 }
 
-function activeSeats(t: PokerTable): PokerSeat[] {
-  return t.seats.filter((s) => !s.folded && s.chips + s.bet > 0);
-}
-
 function advanceToNextActor(t: PokerTable) {
   const n = t.seats.length;
   for (let i = 0; i < n; i++) {
-    t.currentIndex = (t.currentIndex) % n;
+    t.currentIndex = t.currentIndex % n;
     const s = t.seats[t.currentIndex];
     if (!s.folded && !s.allIn && s.chips > 0) return;
     t.currentIndex = (t.currentIndex + 1) % n;
@@ -190,18 +185,18 @@ export function applyAction(
 ): { ok: boolean; error?: string; table: PokerTable } {
   const t = structuredClone(table) as PokerTable;
   const seat = t.seats.find((s) => s.playerId === playerId);
-  if (!seat) return { ok: false, error: 'Jugador no encontrado', table };
+  if (!seat) return { ok: false, error: 'Player not found', table };
   if (t.seats[t.currentIndex]?.playerId !== playerId) {
-    return { ok: false, error: 'No es tu turno', table };
+    return { ok: false, error: 'Not your turn', table };
   }
-  if (seat.folded || seat.allIn) return { ok: false, error: 'No puedes actuar', table };
+  if (seat.folded || seat.allIn) return { ok: false, error: 'Cannot act', table };
 
   const toCall = t.currentBet - seat.bet;
 
   if (action === 'fold') {
     seat.folded = true;
   } else if (action === 'check') {
-    if (toCall > 0) return { ok: false, error: 'Debes igualar o retirarte', table };
+    if (toCall > 0) return { ok: false, error: 'Must call or fold', table };
   } else if (action === 'call') {
     const pay = Math.min(toCall, seat.chips);
     seat.chips -= pay;
@@ -212,7 +207,7 @@ export function applyAction(
   } else if (action === 'raise') {
     const target = raiseTo ?? t.currentBet + t.minRaise;
     if (target < t.currentBet + t.minRaise && target < seat.bet + seat.chips) {
-      return { ok: false, error: 'Subida insuficiente', table };
+      return { ok: false, error: 'Raise too small', table };
     }
     const need = target - seat.bet;
     const pay = Math.min(need, seat.chips);
@@ -235,15 +230,12 @@ export function applyAction(
       t.currentBet = seat.bet;
     }
   } else {
-    return { ok: false, error: 'Accion invalida', table };
+    return { ok: false, error: 'Invalid action', table };
   }
 
   t.currentIndex = (t.currentIndex + 1) % t.seats.length;
-  if (bettingRoundComplete(t)) {
-    progressStreet(t);
-  } else {
-    advanceToNextActor(t);
-  }
+  if (bettingRoundComplete(t)) progressStreet(t);
+  else advanceToNextActor(t);
   return { ok: true, table: t };
 }
 
@@ -291,13 +283,14 @@ function resolveShowdown(t: PokerTable) {
   let best = -1;
   let winners: PokerSeat[] = [];
   for (const s of live) {
+    // Hold'em: best 5 of hole+board. Omaha simplified: best 5 of all (full Omaha rules later)
     const { score } = evaluateHand([...s.hole, ...t.community]);
     if (score > best) {
       best = score;
       winners = [s];
     } else if (score === best) winners.push(s);
   }
-  const share = Math.floor(t.pot / winners.length);
+  const share = Math.floor(t.pot / Math.max(1, winners.length));
   for (const w of winners) w.chips += share;
   t.pot = 0;
   t.phase = 'finished';
