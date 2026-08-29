@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { getSocket, connectSocket } from '../lib/socket';
 import { api } from '../lib/api';
 import { t } from '../i18n';
-import { PlayingCard } from '../components/Icons';
+import { PokerTable, type PokerView } from '../components/PokerTable';
 import {
   RECOMMENDED,
   TABLE_SIZES,
@@ -15,28 +15,7 @@ import {
   formatRank,
 } from '@deckora/shared';
 
-/** menu = elegir rapida/privada · quick = elegir modalidad · private = config · lobby · table */
 type Flow = 'menu' | 'quick' | 'private' | 'lobby' | 'table';
-
-interface SeatView {
-  playerId: string;
-  username: string;
-  chips: number;
-  bet: number;
-  folded: boolean;
-  allIn: boolean;
-  hole: { rank: string; suit: string }[];
-  holeCount: number;
-  isBot: boolean;
-}
-
-interface PokerView {
-  phase: string;
-  community: { rank: string; suit: string }[];
-  pot: number;
-  currentPlayerId?: string;
-  seats: SeatView[];
-}
 
 interface FriendRow {
   id: string;
@@ -108,7 +87,6 @@ export function PlayPage() {
           const me = p.players.find((x) => x.username === profile?.username);
           if (me) {
             setMyId(me.id);
-            // primer jugador = host en privada
             if (p.players[0]?.id === me.id) setIsHost(true);
           }
         }
@@ -136,7 +114,6 @@ export function PlayPage() {
     return socket;
   }
 
-  /** Partida rapida: solo modalidad → cola automatica */
   function joinQuick(v: PokerVariant) {
     setVariant(v);
     setMode('online');
@@ -165,7 +142,6 @@ export function PlayPage() {
     setFlow('lobby');
   }
 
-  /** Crear sala privada (no empieza sola) */
   function createPrivate() {
     setMode('private');
     setIsHost(true);
@@ -207,7 +183,6 @@ export function PlayPage() {
     setFlow('lobby');
   }
 
-  /** Host: empezar ya (rellena huecos con bots si hace falta) */
   function startPrivateNow(fillBots: boolean) {
     getSocket().emit('action', {
       type: 'match:ready',
@@ -225,9 +200,6 @@ export function PlayPage() {
     getSocket().emit('action', { type: 'match:action', payload: { action, data } });
   }
 
-  const mySeat = table?.seats.find((s) => s.playerId === myId);
-  const isTurn = table?.currentPlayerId === myId;
-
   if (!user) {
     return (
       <div className="max-w-lg mx-auto px-4 py-16 text-center">
@@ -239,123 +211,52 @@ export function PlayPage() {
     );
   }
 
-  /* ══════════ MESA ══════════ */
+  /* Mesa fullscreen horizontal */
   if (flow === 'table' && table) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex justify-between mb-4">
-          <h1 className="font-brand text-xl text-navy-900">{POKER_VARIANTS[variant].nameEs}</h1>
-          <button type="button" onClick={leaveAll} className="text-sm text-navy-600 underline">
-            Salir
-          </button>
-        </div>
-        {err && <p className="mb-3 text-sm text-red-700">{err}</p>}
-        <div className="rounded-2xl bg-navy-900 text-white p-6 shadow-card min-h-[320px]">
-          <div className="text-center text-navy-300 text-sm mb-4">
-            {t(lang, 'pot')}: <span className="text-white font-semibold">{table.pot}</span>
-            <span className="mx-2">·</span>
-            {table.phase}
-          </div>
-          <div className="flex justify-center gap-2 mb-8 min-h-[5.5rem] flex-wrap">
-            {table.community?.length ? (
-              table.community.map((c, i) => <PlayingCard key={i} rank={c.rank} suit={c.suit} />)
-            ) : (
-              <span className="text-navy-500 text-sm">—</span>
-            )}
-          </div>
-          <div className="grid sm:grid-cols-2 gap-3">
-            {table.seats.map((s) => (
-              <div
-                key={s.playerId}
-                className={`rounded-lg border px-3 py-2 ${
-                  s.playerId === table.currentPlayerId ? 'border-gold-400 bg-navy-800' : 'border-navy-700'
-                } ${s.folded ? 'opacity-40' : ''}`}
-              >
-                <div className="flex justify-between text-sm">
-                  <span>
-                    {s.username}
-                    {s.isBot ? ' (bot)' : ''}
-                  </span>
-                  <span>{s.chips}</span>
-                </div>
-                <div className="flex gap-1 mt-2">
-                  {s.hole?.length
-                    ? s.hole.map((c, i) => (
-                        <PlayingCard key={i} rank={c.rank} suit={c.suit} className="!w-10 !h-14" />
-                      ))
-                    : Array.from({ length: s.holeCount || 0 }).map((_, i) => (
-                        <PlayingCard key={i} hidden className="!w-10 !h-14" />
-                      ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        {isTurn && mySeat && !mySeat.folded && (
-          <div className="mt-6 flex flex-wrap gap-2">
-            <button type="button" onClick={() => act('fold')} className="rounded-lg border border-navy-200 px-4 py-2 text-sm">
-              {t(lang, 'fold')}
-            </button>
-            <button type="button" onClick={() => act('check')} className="rounded-lg border border-navy-200 px-4 py-2 text-sm">
-              {t(lang, 'check')}
-            </button>
-            <button type="button" onClick={() => act('call')} className="rounded-lg bg-navy-800 text-white px-4 py-2 text-sm">
-              {t(lang, 'call')}
-            </button>
-            <input
-              type="number"
-              value={raiseAmt}
-              onChange={(e) => setRaiseAmt(Number(e.target.value))}
-              className="w-24 border rounded-lg px-2 py-2 text-sm"
-            />
-            <button
-              type="button"
-              onClick={() => act('raise', { raiseTo: raiseAmt })}
-              className="rounded-lg bg-navy-900 text-white px-4 py-2 text-sm"
-            >
-              {t(lang, 'raise')}
-            </button>
-            <button type="button" onClick={() => act('allin')} className="rounded-lg border border-navy-900 px-4 py-2 text-sm">
-              {t(lang, 'allin')}
-            </button>
-          </div>
-        )}
-      </div>
+      <PokerTable
+        table={table}
+        myId={myId}
+        variantLabel={POKER_VARIANTS[variant].nameEs}
+        onLeave={leaveAll}
+        onAct={act}
+        raiseAmt={raiseAmt}
+        setRaiseAmt={setRaiseAmt}
+        labels={{
+          fold: t(lang, 'fold'),
+          check: t(lang, 'check'),
+          call: t(lang, 'call'),
+          raise: t(lang, 'raise'),
+          allin: t(lang, 'allin'),
+          pot: t(lang, 'pot'),
+        }}
+      />
     );
   }
 
-  /* ══════════ LOBBY (esperando / privada) ══════════ */
   if (flow === 'lobby') {
     return (
       <div className="max-w-md mx-auto px-4 py-10">
         <button type="button" onClick={leaveAll} className="text-sm text-navy-500 mb-4">
           ← Cancelar
         </button>
-
         <div className="rounded-xl border border-navy-100 bg-white p-6 shadow-soft text-center">
           <p className="text-sm text-navy-500 mb-1">
             {mode === 'online' ? 'Partida rapida' : 'Sala privada'} · {POKER_VARIANTS[variant].nameEs}
           </p>
           <p className="text-4xl font-brand text-navy-900 my-3">
-            {waiting}
-            {mode === 'online' ? ` / ${target}` : ` / ${target}`}
+            {waiting} / {target}
           </p>
-
           {mode === 'online' ? (
             <p className="text-sm text-navy-600">
-              Buscando jugadores de rango cercano…
-              <br />
-              La mesa empieza sola al llenarse ({target}).
+              Buscando jugadores… La mesa empieza al llenarse ({target}).
             </p>
           ) : (
             <>
               {privateCode && (
                 <p className="font-brand text-2xl tracking-widest text-navy-900 my-2">{privateCode}</p>
               )}
-              <p className="text-sm text-navy-600 mb-4">
-                Invita amigos o rellena con bots. Empieza cuando quieras.
-              </p>
-
+              <p className="text-sm text-navy-600 mb-4">Invita amigos o rellena con bots.</p>
               {isHost && (
                 <div className="flex flex-col gap-2">
                   <button
@@ -375,17 +276,15 @@ export function PlayPage() {
                   </button>
                 </div>
               )}
-
-              {!isHost && <p className="text-sm text-navy-500">Esperando a que el anfitrion inicie…</p>}
+              {!isHost && <p className="text-sm text-navy-500">Esperando al anfitrion…</p>}
             </>
           )}
         </div>
-
         {mode === 'private' && (
           <div className="mt-4 rounded-xl border border-navy-100 bg-white p-4 shadow-soft">
             <h2 className="text-sm font-semibold text-navy-900 mb-2">Invitar amigos</h2>
             {friends.length === 0 ? (
-              <p className="text-sm text-navy-500">Sin amigos. Anadelos en Amigos.</p>
+              <p className="text-sm text-navy-500">Sin amigos en lista.</p>
             ) : (
               <ul className="space-y-2">
                 {friends.map((f) => {
@@ -407,13 +306,11 @@ export function PlayPage() {
             )}
           </div>
         )}
-
         {err && <p className="mt-3 text-sm text-red-700">{err}</p>}
       </div>
     );
   }
 
-  /* ══════════ PARTIDA RAPIDA: elegir modalidad ══════════ */
   if (flow === 'quick') {
     return (
       <div className="max-w-md mx-auto px-4 py-10">
@@ -422,17 +319,13 @@ export function PlayPage() {
         </button>
         <h1 className="font-brand text-2xl text-navy-900 mb-1">Partida rapida</h1>
         <p className="text-sm text-navy-500 mb-6">
-          Tu rango: <strong className="text-navy-800">{rankLabel}</strong> · 10 min · se une sola a una mesa cercana
+          Rango: <strong className="text-navy-800">{rankLabel}</strong> · 10 min
         </p>
-
         <div className="rounded-xl border-2 border-navy-900 bg-navy-900 text-white p-4 mb-4">
           <div className="text-xs uppercase tracking-wide text-navy-300">Recomendado</div>
           <div className="font-semibold mt-1">
             {POKER_VARIANTS[RECOMMENDED.variant].nameEs} · mesa de {RECOMMENDED.tableSize}
           </div>
-          <p className="text-sm text-navy-300 mt-1">
-            {lang === 'en' ? RECOMMENDED.reasonEn : lang === 'fr' ? RECOMMENDED.reasonFr : RECOMMENDED.reasonEs}
-          </p>
           <button
             type="button"
             onClick={() => joinQuick(RECOMMENDED.variant)}
@@ -441,18 +334,15 @@ export function PlayPage() {
             Jugar recomendado
           </button>
         </div>
-
-        <p className="text-sm font-medium text-navy-800 mb-2">O elige modalidad</p>
         <div className="grid grid-cols-2 gap-3">
           {(['holdem', 'omaha'] as PokerVariant[]).map((v) => (
             <button
               key={v}
               type="button"
               onClick={() => joinQuick(v)}
-              className="rounded-xl border border-navy-100 bg-white p-4 text-left shadow-soft hover:border-navy-400"
+              className="rounded-xl border border-navy-100 bg-white p-4 text-left shadow-soft"
             >
               <div className="font-semibold text-navy-900">{POKER_VARIANTS[v].nameEs}</div>
-              <div className="text-xs text-navy-500 mt-1">Mesa de {RECOMMENDED.tableSize} · espera a llenar</div>
             </button>
           ))}
         </div>
@@ -460,7 +350,6 @@ export function PlayPage() {
     );
   }
 
-  /* ══════════ PRIVADA: config ══════════ */
   if (flow === 'private') {
     return (
       <div className="max-w-md mx-auto px-4 py-10">
@@ -468,7 +357,6 @@ export function PlayPage() {
           ← Atras
         </button>
         <h1 className="font-brand text-2xl text-navy-900 mb-6">Sala privada</h1>
-
         <div className="space-y-5">
           <div>
             <label className="text-sm font-medium text-navy-800">Modalidad</label>
@@ -487,9 +375,8 @@ export function PlayPage() {
               ))}
             </div>
           </div>
-
           <div>
-            <label className="text-sm font-medium text-navy-800">Jugadores (max)</label>
+            <label className="text-sm font-medium text-navy-800">Jugadores</label>
             <div className="flex flex-wrap gap-2 mt-1">
               {TABLE_SIZES.map((n) => (
                 <button
@@ -505,9 +392,8 @@ export function PlayPage() {
               ))}
             </div>
           </div>
-
           <div>
-            <label className="text-sm font-medium text-navy-800">Tiempo limite</label>
+            <label className="text-sm font-medium text-navy-800">Tiempo</label>
             <div className="flex flex-wrap gap-2 mt-1">
               {PRIVATE_TIME_OPTIONS_MIN.map((m) => (
                 <button
@@ -523,24 +409,13 @@ export function PlayPage() {
               ))}
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={createPrivate}
-            className="w-full rounded-lg bg-navy-900 text-white py-3 font-medium"
-          >
+          <button type="button" onClick={createPrivate} className="w-full rounded-lg bg-navy-900 text-white py-3 font-medium">
             Crear sala
           </button>
-
           <div className="pt-3 border-t border-navy-100">
-            <label className="text-sm font-medium text-navy-800">Unirse con codigo</label>
+            <label className="text-sm font-medium text-navy-800">Codigo</label>
             <div className="flex gap-2 mt-1">
-              <input
-                id="join-code"
-                className="flex-1 border border-navy-200 rounded-lg px-3 py-2 uppercase"
-                placeholder="ABC123"
-                maxLength={8}
-              />
+              <input id="join-code" className="flex-1 border border-navy-200 rounded-lg px-3 py-2 uppercase" maxLength={8} />
               <button
                 type="button"
                 onClick={() => {
@@ -558,35 +433,28 @@ export function PlayPage() {
     );
   }
 
-  /* ══════════ MENU: Rapida | Privada ══════════ */
   return (
     <div className="max-w-md mx-auto px-4 py-12">
       <h1 className="font-brand text-3xl text-navy-900 mb-2">{t(lang, 'play')}</h1>
       <p className="text-navy-500 text-sm mb-8">
         Rango: <strong className="text-navy-800">{rankLabel}</strong>
       </p>
-
       <div className="space-y-4">
         <button
           type="button"
           onClick={() => setFlow('quick')}
-          className="w-full text-left rounded-xl border border-navy-100 bg-white p-5 shadow-soft hover:border-navy-300"
+          className="w-full text-left rounded-xl border border-navy-100 bg-white p-5 shadow-soft"
         >
           <div className="font-semibold text-navy-900 text-lg">Partida rapida</div>
-          <p className="text-sm text-navy-500 mt-1">
-            Eliges Hold'em u Omaha y entras en cola. Cuando se llena la mesa, empieza.
-          </p>
+          <p className="text-sm text-navy-500 mt-1">Cola automatica. Empieza al llenar la mesa.</p>
         </button>
-
         <button
           type="button"
           onClick={() => setFlow('private')}
-          className="w-full text-left rounded-xl border border-navy-100 bg-white p-5 shadow-soft hover:border-navy-300"
+          className="w-full text-left rounded-xl border border-navy-100 bg-white p-5 shadow-soft"
         >
           <div className="font-semibold text-navy-900 text-lg">Sala privada</div>
-          <p className="text-sm text-navy-500 mt-1">
-            Modalidad, jugadores, tiempo, invitaciones. Empiezas tu; puedes rellenar con bots.
-          </p>
+          <p className="text-sm text-navy-500 mt-1">Invita, bots y empiezas tu.</p>
         </button>
       </div>
     </div>
