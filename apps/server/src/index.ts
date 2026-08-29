@@ -28,11 +28,24 @@ app.get('/health', async (_req, res) => {
   });
 });
 
-// ── Auth (todo por backend + service_role) ───────────────────────────────────
+/** Perfil público (sin auth_user_id) */
+async function fetchProfile(authUserId: string) {
+  const sb = getSupabase();
+  const { data } = await sb
+    .from('profiles')
+    .select(
+      'id, username, avatar_url, level, xp, wins, losses, games_played, coins, gems, current_streak, best_streak, season_pass_xp, season_pass_premium, title'
+    )
+    .eq('auth_user_id', authUserId)
+    .maybeSingle();
+  return data;
+}
+
+// ── Auth: sin verificación de email (email_confirm automático) ────────────────
 app.post('/api/auth/signup', async (req, res) => {
   try {
     if (!isDbConfigured()) return res.status(503).json({ error: 'DB no configurada' });
-    const email = String(req.body?.email ?? '').trim();
+    const email = String(req.body?.email ?? '').trim().toLowerCase();
     const password = String(req.body?.password ?? '');
     const username = String(req.body?.username ?? '').trim().toLowerCase();
     if (!email || password.length < 6 || username.length < 3) {
@@ -42,6 +55,7 @@ app.post('/api/auth/signup', async (req, res) => {
     const { data: existing } = await sb.from('profiles').select('id').eq('username', username).maybeSingle();
     if (existing) return res.status(400).json({ error: 'Usuario ya existe' });
 
+    // email_confirm: true → no hace falta verificar correo
     const { data, error } = await sb.auth.admin.createUser({
       email,
       password,
@@ -49,37 +63,28 @@ app.post('/api/auth/signup', async (req, res) => {
       user_metadata: { username },
     });
     if (error) return res.status(400).json({ error: error.message });
+    if (!data.user) return res.status(500).json({ error: 'No se creó el usuario' });
 
-    // Perfil: el trigger puede crearlo; aseguramos filas
-    if (data.user) {
-      await sb.from('profiles').upsert(
-        {
-          auth_user_id: data.user.id,
-          username,
-          coins: 500,
-          gems: 0,
-        },
-        { onConflict: 'auth_user_id' }
-      );
-    }
+    await sb.from('profiles').upsert(
+      {
+        auth_user_id: data.user.id,
+        username,
+        coins: 500,
+        gems: 0,
+      },
+      { onConflict: 'auth_user_id' }
+    );
 
     const login = await sb.auth.signInWithPassword({ email, password });
     if (login.error || !login.data.session) {
       return res.json({ ok: true, message: 'Cuenta creada. Inicia sesión.' });
     }
-    const { data: profile } = await sb
-      .from('profiles')
-      .select(
-        'id, username, avatar_url, level, xp, wins, losses, games_played, coins, gems, current_streak, best_streak, season_pass_xp, season_pass_premium, title'
-      )
-      .eq('auth_user_id', data.user!.id)
-      .maybeSingle();
-
+    const profile = await fetchProfile(data.user.id);
     res.json({
       access_token: login.data.session.access_token,
       refresh_token: login.data.session.refresh_token,
       expires_at: login.data.session.expires_at,
-      user: { id: data.user!.id, email },
+      user: { id: data.user.id, email },
       profile,
     });
   } catch (e) {
@@ -91,18 +96,29 @@ app.post('/api/auth/signup', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     if (!isDbConfigured()) return res.status(503).json({ error: 'DB no configurada' });
-    const email = String(req.body?.email ?? '').trim();
+    const email = String(req.body?.email ?? '').trim().toLowerCase();
     const password = String(req.body?.password ?? '');
     const sb = getSupabase();
-    const { data, error } = await sb.auth.signInWithPassword({ email, password });
-    if (error || !data.session) return res.status(401).json({ error: error?.message ?? 'Login fallido' });
-    const { data: profile } = await sb
-      .from('profiles')
-      .select(
-        'id, username, avatar_url, level, xp, wins, losses, games_played, coins, gems, current_streak, best_streak, season_pass_xp, season_pass_premium, title'
-      )
-      .eq('auth_user_id', data.user.id)
-      .maybeSingle();
+
+    let { data, error } = await sb.auth.signInWithPassword({ email, password });
+
+    // Si el proyecto aún exige confirmación: confirmamos y reintentamos
+    if (error && /confirm|verified|email/i.test(error.message)) {
+      const { data: listed } = await sb.auth.admin.listUsers({ page: 1, perPage: 200 });
+      const found = listed?.users?.find((u) => u.email?.toLowerCase() === email);
+      if (found) {
+        await sb.auth.admin.updateUserById(found.id, { email_confirm: true });
+        const retry = await sb.auth.signInWithPassword({ email, password });
+        data = retry.data;
+        error = retry.error;
+      }
+    }
+
+    if (error || !data?.session || !data.user) {
+      return res.status(401).json({ error: error?.message ?? 'Login fallido' });
+    }
+
+    const profile = await fetchProfile(data.user.id);
     res.json({
       access_token: data.session.access_token,
       refresh_token: data.session.refresh_token,
@@ -131,16 +147,8 @@ app.get('/api/auth/me', async (req, res) => {
   }
 });
 
-app.post('/api/auth/logout', async (req, res) => {
-  try {
-    const header = req.headers.authorization;
-    if (header?.startsWith('Bearer ')) {
-      const sb = getSupabase();
-      await sb.auth.admin.signOut(header.slice(7));
-    }
-  } catch {
-    /* ignore */
-  }
+app.post('/api/auth/logout', async (_req, res) => {
+  // El cliente borra el token local; no hace falta invalidar en servidor
   res.json({ ok: true });
 });
 
