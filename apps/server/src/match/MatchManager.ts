@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import { v4 as uuid } from 'uuid';
-import type { ClientAction, MatchConfig, MatchState, Player, ServerEvent } from '@deckora/shared';
-import { DISCONNECT_GRACE_MS } from '@deckora/shared';
+import type { ClientAction, MatchConfig, MatchState, Player, ServerEvent, PokerVariant } from '@deckora/shared';
+import { DISCONNECT_GRACE_MS, ONLINE_MATCH_MS, matchmakingWindow } from '@deckora/shared';
 import {
   applyAction,
   createTable,
@@ -18,6 +18,7 @@ interface InternalMatch {
   disconnectTimers: Map<string, NodeJS.Timeout>;
   poker?: PokerTable;
   startingChips: number;
+  playerMmr: Map<string, number>;
 }
 
 export class MatchManager {
@@ -39,7 +40,9 @@ export class MatchManager {
           this.handleGameAction(socket, action.payload);
           break;
         case 'match:ready':
-          this.tryStart(socket);
+          break;
+        case 'match:invite':
+          this.handleInvite(socket, action.payload);
           break;
         default:
           this.emitToSocket(socket, {
@@ -83,6 +86,26 @@ export class MatchManager {
     match.disconnectTimers.set(ref.playerId, timer);
   }
 
+  private handleInvite(socket: Socket, payload: { username: string }) {
+    const ref = this.socketToPlayer.get(socket.id);
+    if (!ref) return;
+    const match = this.matches.get(ref.matchId);
+    if (!match || match.state.config.mode !== 'private') return;
+    const from = match.state.players.find((p) => p.id === ref.playerId);
+    // Broadcast invite event — client of invited user would filter by username in future presence system
+    this.io.emit('event', {
+      type: 'match:invite',
+      payload: {
+        matchId: match.state.matchId,
+        code: match.state.config.privateCode ?? '',
+        from: from?.username ?? 'player',
+        variant: match.state.config.variant,
+        to: payload.username,
+      },
+    });
+    this.emitToSocket(socket, { type: 'match:action_result', payload: { success: true } });
+  }
+
   private joinMatch(
     socket: Socket,
     payload: {
@@ -91,28 +114,51 @@ export class MatchManager {
       config?: Partial<MatchConfig>;
       username?: string;
       avatarUrl?: string;
+      mmr?: number;
     }
   ) {
     if (this.socketToPlayer.has(socket.id)) this.leaveMatch(socket);
 
+    const mode = payload.config?.mode === 'private' ? 'private' : 'online';
+    const variant = (payload.config?.variant === 'omaha' ? 'omaha' : 'holdem') as PokerVariant;
+    const targetPlayers = Math.min(9, Math.max(2, payload.config?.targetPlayers ?? payload.config?.maxPlayers ?? 6));
+    const durationMs = payload.config?.durationMs ?? (mode === 'online' ? ONLINE_MATCH_MS : ONLINE_MATCH_MS);
+    const playerMmr = payload.mmr ?? 800;
+
     let match: InternalMatch | undefined;
+
     if (payload.matchId) match = this.matches.get(payload.matchId);
     else if (payload.code) {
-      match = [...this.matches.values()].find((m) => m.state.config.privateCode === payload.code);
+      match = [...this.matches.values()].find(
+        (m) => m.state.config.privateCode === payload.code && m.state.phase === 'waiting'
+      );
+    } else if (mode === 'online') {
+      // Matchmaking: misma variante, mismo tamano, fase waiting, MMR cercano
+      const window = matchmakingWindow(playerMmr);
+      match = [...this.matches.values()].find((m) => {
+        if (m.state.phase !== 'waiting') return false;
+        if (m.state.config.mode !== 'online') return false;
+        if (m.state.config.variant !== variant) return false;
+        if (m.state.config.targetPlayers !== targetPlayers) return false;
+        if (m.state.players.length >= targetPlayers) return false;
+        const lobby = m.state.config.lobbyMmr ?? playerMmr;
+        return Math.abs(lobby - playerMmr) <= window;
+      });
     }
-
-    const mode = payload.config?.mode ?? 'quick';
-    const maxPlayers = payload.config?.maxPlayers ?? (mode === 'bot' ? 4 : 6);
 
     if (!match) {
       const matchId = uuid();
       const config: MatchConfig = {
         gameId: 'poker',
         mode,
-        maxPlayers,
-        minPlayers: mode === 'bot' ? 2 : 2,
+        variant,
+        targetPlayers,
+        maxPlayers: targetPlayers,
+        minPlayers: targetPlayers,
+        durationMs,
         privateCode: mode === 'private' ? this.generateCode() : undefined,
-        ranked: mode === 'ranked',
+        ranked: mode === 'online',
+        lobbyMmr: playerMmr,
       };
       const state: MatchState = {
         matchId,
@@ -126,30 +172,13 @@ export class MatchManager {
         state,
         sockets: new Map(),
         disconnectTimers: new Map(),
-        startingChips: mode === 'ranked' ? 1000 : 1500,
+        startingChips: 1500,
+        playerMmr: new Map(),
       };
       this.matches.set(matchId, match);
-
-      if (mode === 'bot' || mode === 'friendly') {
-        const bots = Math.min(3, maxPlayers - 1);
-        for (let i = 0; i < bots; i++) {
-          match.state.players.push({
-            id: uuid(),
-            username: `Bot ${i + 1}`,
-            status: 'bot',
-            isBot: true,
-            botLevel: 1000 + i * 200,
-            seat: i,
-          });
-        }
-      }
     }
 
-    if (match.state.players.filter((p) => !p.isBot || p.status === 'bot').length >= match.state.config.maxPlayers &&
-        match.state.players.length >= match.state.config.maxPlayers) {
-      // allow if seat free
-    }
-    if (match.state.players.length >= match.state.config.maxPlayers) {
+    if (match.state.players.length >= match.state.config.targetPlayers) {
       this.emitToSocket(socket, {
         type: 'match:action_result',
         payload: { success: false, error: 'Table full' },
@@ -164,9 +193,14 @@ export class MatchManager {
       avatarUrl: payload.avatarUrl,
       status: 'connected',
       isBot: false,
+      mmr: playerMmr,
       seat: match.state.players.length,
     };
     match.state.players.push(player);
+    match.playerMmr.set(playerId, playerMmr);
+    // Update lobby average MMR
+    const mmrs = [...match.playerMmr.values()];
+    match.state.config.lobbyMmr = Math.round(mmrs.reduce((a, b) => a + b, 0) / mmrs.length);
     match.state.updatedAt = Date.now();
     match.sockets.set(playerId, socket.id);
     this.socketToPlayer.set(socket.id, { matchId: match.state.matchId, playerId });
@@ -176,32 +210,14 @@ export class MatchManager {
     this.broadcastState(match);
     this.emitToSocket(socket, { type: 'match:action_result', payload: { success: true } });
 
-    // auto-start bot/friendly when enough players
-    if (
-      match.state.phase === 'waiting' &&
-      match.state.players.length >= match.state.config.minPlayers &&
-      (mode === 'bot' || mode === 'friendly' || match.state.players.length >= match.state.config.maxPlayers)
-    ) {
+    // Solo empieza cuando la mesa esta completa
+    if (match.state.players.length >= match.state.config.targetPlayers) {
       this.beginPoker(match);
     }
   }
 
-  private tryStart(socket: Socket) {
-    const ref = this.socketToPlayer.get(socket.id);
-    if (!ref) return;
-    const match = this.matches.get(ref.matchId);
-    if (!match || match.state.phase !== 'waiting') return;
-    if (match.state.players.length < match.state.config.minPlayers) {
-      this.emitToSocket(socket, {
-        type: 'match:action_result',
-        payload: { success: false, error: 'Need more players' },
-      });
-      return;
-    }
-    this.beginPoker(match);
-  }
-
   private beginPoker(match: InternalMatch) {
+    const holeCards = match.state.config.variant === 'omaha' ? 4 : 2;
     const seats = match.state.players.map((p, i) => ({
       playerId: p.id,
       username: p.username,
@@ -210,12 +226,22 @@ export class MatchManager {
       seat: i,
     }));
     let table = createTable(seats);
-    table = startHand(table);
+    table = startHand(table, holeCards);
     match.poker = table;
     match.state.phase = 'playing';
+    match.state.endsAt = Date.now() + match.state.config.durationMs;
     match.state.updatedAt = Date.now();
     this.broadcastPoker(match);
     this.maybeBotTurn(match);
+
+    // Timer de sesion
+    const remaining = match.state.config.durationMs;
+    setTimeout(() => {
+      if (match.state.phase === 'playing') {
+        match.state.phase = 'finished';
+        this.broadcastState(match);
+      }
+    }, remaining);
   }
 
   private leaveMatch(socket: Socket) {
@@ -224,12 +250,17 @@ export class MatchManager {
     const match = this.matches.get(ref.matchId);
     if (!match) return;
     match.state.players = match.state.players.filter((p) => p.id !== ref.playerId);
+    match.playerMmr.delete(ref.playerId);
     match.sockets.delete(ref.playerId);
     this.socketToPlayer.delete(socket.id);
     socket.leave(match.state.matchId);
     this.broadcast(match, { type: 'match:player_left', payload: { playerId: ref.playerId } });
-    if (match.state.players.length === 0) this.matches.delete(ref.matchId);
-    else this.broadcastState(match);
+    if (match.state.players.length === 0 || match.state.phase === 'waiting') {
+      if (match.state.players.length === 0) this.matches.delete(ref.matchId);
+      else this.broadcastState(match);
+    } else {
+      this.broadcastState(match);
+    }
   }
 
   private handleGameAction(socket: Socket, payload: { action: string; data?: unknown }) {
@@ -270,13 +301,17 @@ export class MatchManager {
     this.broadcastPoker(match);
 
     if (match.poker.phase === 'finished') {
-      // next hand after short delay if players have chips
       setTimeout(() => {
         if (!match.poker) return;
-        const withChips = match.poker.seats.filter((s) => s.chips > 0);
-        if (withChips.length >= 2) {
+        if (match.state.endsAt && Date.now() >= match.state.endsAt) {
+          match.state.phase = 'finished';
+          this.broadcastState(match);
+          return;
+        }
+        if (match.poker.seats.filter((s) => s.chips > 0).length >= 2) {
           match.poker.dealerIndex = (match.poker.dealerIndex + 1) % match.poker.seats.length;
-          match.poker = startHand(match.poker);
+          const holes = match.state.config.variant === 'omaha' ? 4 : 2;
+          match.poker = startHand(match.poker, holes);
           this.broadcastPoker(match);
           this.maybeBotTurn(match);
         } else {
@@ -303,26 +338,13 @@ export class MatchManager {
       if (result.ok) {
         match.poker = result.table;
         this.broadcastPoker(match);
-        if (match.poker.phase === 'finished') {
-          setTimeout(() => {
-            if (!match.poker) return;
-            if (match.poker.seats.filter((s) => s.chips > 0).length >= 2) {
-              match.poker.dealerIndex = (match.poker.dealerIndex + 1) % match.poker.seats.length;
-              match.poker = startHand(match.poker);
-              this.broadcastPoker(match);
-              this.maybeBotTurn(match);
-            }
-          }, 2500);
-        } else {
-          this.maybeBotTurn(match);
-        }
+        if (match.poker.phase !== 'finished') this.maybeBotTurn(match);
       }
     }, 600 + Math.random() * 800);
   }
 
   private broadcastPoker(match: InternalMatch) {
     if (!match.poker) return;
-    // each player gets personalized hole cards
     for (const [playerId, socketId] of match.sockets) {
       const sock = this.io.sockets.sockets.get(socketId);
       if (!sock) continue;
@@ -330,11 +352,10 @@ export class MatchManager {
         type: 'match:state',
         payload: {
           ...match.state,
-          table: publicView(match.poker, playerId) as unknown as MatchState['table'],
+          table: publicView(match.poker, playerId),
         },
       });
     }
-    // also broadcast generic for spectators via room without holes
     this.io.to(match.state.matchId).emit('poker:public', publicView(match.poker));
   }
 
